@@ -1,27 +1,30 @@
-"SkywindJan19a.rar": 
-  dest: Data/
-  hash: 45b9bcacd4dff3805e9a28b7ca75688550a17cbe1c565abff0c07fa5720a9877
-"SkywindMeshesBetav0.1.rar":
-  dest: Data/
-  hash: 35377631f1a7a1063ed0003518584649964be2d3c9f15ffe3a566811966ced57
-"Skywind Texture Update 1.rar":
-  dest: '.'
-  hash: 0ea6530ddd97fd5c819b6d7ffa0c0358317cd4bfb17c9d5ed4ace8c98d541430
-"Morrowind sounds.rar":
-  dest: Data/
-  hash: 8f2bd06963cb7e20d826b144d831132b6ab6740834f6e10a2d5cae3a49014d67
-"Skywind Music.rar":
-  dest: Data/
-  hash: e7beeb3fab9929e1d176713ae6473a42ce7501226a00d23d43ee62f249ff0679
-"SkywindTexturesAlpha.rar":
-  dest: Data/Textures
-  hash: false
-"Skywind LOD Textures.rar":
-  dest: Data/
-  hash: c679d8188c2291b6dd10949de7fd604d26fa011c68840072bfa90a3a22782f61
-"Skywind LOD Meshes.rar":
-  dest: Data/
-  hash: f690e65ccaf94b84eaae36ad5257c6fc348218c701d0463b17d9abef74f4873e
-"Skywind LODSettings.rar":
-  dest: Data/
-  hash: a3ba0609bd3556ac9aeb44453ee37c1016a56b49295e8c7208e72ae9bdee945f
+version: 'v056'
+desc: http://morroblivion.com/forums/skyrim/skywind-mod-releases/3323 
+files:
+  "SkywindJan19a.rar": 
+    dest: Data/
+    hash: 45b9bcacd4dff3805e9a28b7ca75688550a17cbe1c565abff0c07fa5720a9877
+  "SkywindMeshesBetav0.1.rar":
+    dest: Data/
+    hash: 35377631f1a7a1063ed0003518584649964be2d3c9f15ffe3a566811966ced57
+  "Skywind Texture Update 1.rar":
+    dest: '.'
+    hash: 0ea6530ddd97fd5c819b6d7ffa0c0358317cd4bfb17c9d5ed4ace8c98d541430
+  "Morrowind sounds.rar":
+    dest: Data/
+    hash: 8f2bd06963cb7e20d826b144d831132b6ab6740834f6e10a2d5cae3a49014d67
+  "Skywind Music.rar":
+    dest: Data/
+    hash: e7beeb3fab9929e1d176713ae6473a42ce7501226a00d23d43ee62f249ff0679
+  "SkywindTexturesAlpha.rar":
+    dest: Data/Textures
+    hash: false
+  "Skywind LOD Textures.rar":
+    dest: Data/
+    hash: c679d8188c2291b6dd10949de7fd604d26fa011c68840072bfa90a3a22782f61
+  "Skywind LOD Meshes.rar":
+    dest: Data/
+    hash: f690e65ccaf94b84eaae36ad5257c6fc348218c701d0463b17d9abef74f4873e
+  "Skywind LODSettings.rar":
+    dest: Data/
+    hash: a3ba0609bd3556ac9aeb44453ee37c1016a56b49295e8c7208e72ae9bdee945f

@@ -4,7 +4,6 @@
 from __future__ import print_function
 import sys
 import logging
-import rarfile
 
 logging.basicConfig(format='[%(asctime)s] %(levelname)s:\t\t%(message)s', filename='skywind.log',
                     level=logging.DEBUG,
@@ -47,7 +46,7 @@ class GameInfoPanel(QWidget):
         self.browse = QPushButton('Change')
         self.browse.clicked.connect(self.changePath)
 
-        self.layout().addWidget(self.icon)
+        # self.layout().addWidget(self.icon)
 
         self.info_panel = QWidget()
         self.info_panel.setLayout(QVBoxLayout())
@@ -110,23 +109,27 @@ class SkywindPanel(QWidget):
         self.Morrowind = morrowind
         self.Skyrim = skyrim
 
+        self.Skyrim.updated.connect(self.update)
+
         QWidget.__init__(self)
         self.setLayout(QHBoxLayout())
-        
-        self.installer = Installer(self)
+
+        self.install_path = self.Skyrim.path
+        self.distrib_path = os.path.abspath('.')
+        self.install = QPushButton(u'Install')
+        self.installer = Installer(self, self.install)
 
         self.icon_name = 'Skywind'
         self.icon = QLabel()
         self.icon.setPixmap(QPixmap('icons/%s.png' % self.icon_name).scaledToWidth(64, Qt.SmoothTransformation))
 
-        self.layout().addWidget(self.icon)
+        # self.layout().addWidget(self.icon)
 
         self.info_str, self.is_valid = check_skywind(self.Skyrim.path)
         self.info = QLabel(self.info_str)
 
         self.layout().addWidget(self.info)
 
-        self.install = QPushButton(u'Install')
         if not DEBUG:
             self.install.setEnabled(self.Morrowind.is_valid())
 
@@ -135,24 +138,28 @@ class SkywindPanel(QWidget):
         self.updateInstallButton()
         self.updated.emit()
 
+
     def update(self):
-        self.info_str, self.is_valid = check_skywind(self.skyrim.path)
+        self.info_str, self.is_valid = check_skywind(self.Skyrim.path)
         self.info.setText(self.info_str)
-        self.updateInstallButton()
         self.updateInstallButton()
         self.updated.emit()
 
     def updateInstallButton(self):
+        try:
+            self.install.clicked.disconnect(self.installer.install)
+            self.install.clicked.disconnect(self.installer.uninstall)
+        except TypeError:
+            pass
         if not self.is_valid:
             self.install.setText('Install')
             self.install.clicked.connect(self.installer.install)
         else:
             self.install.setText('Uninstall')
-            self.install.clicked.connect(self.installer.startUninstall)
+            self.install.clicked.connect(self.installer.uninstall)
 
 
 class UI(QMainWindow):
-
     def __init__(self):
         QMainWindow.__init__(self)
         self.setWindowTitle(u"Skywind" if not DEBUG else 'Skywind [DEBUG]')
@@ -172,7 +179,6 @@ class UI(QMainWindow):
 
         self.Skywind = SkywindPanel(self.Skyrim, self.Morrowind)
         panel.layout().addWidget(self.Skywind)
-        
 
         buttons = QWidget()
         buttons.setLayout(QHBoxLayout())
@@ -186,6 +192,12 @@ class UI(QMainWindow):
         # buttons.layout().addWidget(exit_button)
 
         panel.layout().setAlignment(Qt.AlignTop)
+
+        self.statusBar = QStatusBar(self)
+        self.statusBar.addPermanentWidget(QWidget().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
+        self.setStatusBar(self.statusBar)
+        self.statusBar.addPermanentWidget(QLabel(u'Version: %s  ' % __version__))
+        self.statusBar.setSizeGripEnabled(False)
 
 
 def main():
