@@ -14,6 +14,7 @@ __version__ = '0.0.3'
 
 from config import Config
 import rarfile
+import yaml
 
 
 class Worker(QThread):
@@ -80,27 +81,39 @@ class Installer(QObject):
 
         self.wizard = QWizard()
         self.wizard.setOptions(QWizard.NoBackButtonOnStartPage | QWizard.NoBackButtonOnLastPage)
+        self.wizard.resize(800, 600)
+
+        self.unwizard = QWizard()
+        self.unwizard.setOptions(QWizard.NoBackButtonOnStartPage | QWizard.NoBackButtonOnLastPage)
+        self.unwizard.resize(800, 600)
 
         self.pip = self.PreInstallPage(self)
         self.cp = self.CheckPage(self)
         self.ip = self.InstallPage(self)
 
+        self.puip = self.PreUnInstallPage(self)
+        self.uip = self.UnInstallPage(self)
+
         self.wizard.addPage(self.pip)
         self.wizard.addPage(self.cp)
         self.wizard.addPage(self.ip)
+
+        self.unwizard.addPage(self.puip)
+        self.unwizard.addPage(self.uip)
 
     def install(self):
         self.wizard.setModal(True)
         self.wizard.show()
 
     def uninstall(self):
-        pass
+        self.unwizard.setModal(True)
+        self.unwizard.show()
 
     class PreInstallPage(QWizardPage):
         def __init__(self, parent):
             QWizardPage.__init__(self)
             self.parent = parent
-
+            
             self.setLayout(QGridLayout())
             self.setTitle('Options')
             self.setSubTitle('Please select destination folder and folder which contains distributive files.')
@@ -118,6 +131,10 @@ class Installer(QObject):
 
             self.path.updated.connect(self.changed)
             self.distrib_path.updated.connect(self.changed)
+
+        def initializePage(self):
+            self.path.setPath(self.parent.options.install_path)
+            self.distrib_path.setPath(self.parent.options.distrib_path)
 
         def changed(self):
             self.completeChanged.emit()
@@ -306,33 +323,183 @@ class Installer(QObject):
                 self.message.emit('to %s' % dest_path)
                 rf.extractall(dest_path)
 
+            self.generateUninstallList(destination, src, map(lambda x: str(x.component), self.components))
+
+        def generateUninstallList(self, install_path, distrib_path, components):
+            self.message.emit(u'Generating uninstall list...')
+
+            with open('uninstall.list', 'w') as f:
+                l = ''
+                for i, distr_file in enumerate(components):
+                    filepath = os.path.abspath(
+                        os.path.join(distrib_path, distr_file)
+                    )
+                    rf = rarfile.RarFile(filepath)
+                    file_list = {distr_file: []}
+                    for fl in rf.infolist():
+                        file_list[distr_file].append(
+                            os.path.normpath(
+                                os.path.join(install_path, self.schema.files[distr_file]['dest'], fl.filename)
+                            )
+                        )
+                    l += yaml.dump(file_list, default_flow_style=False, indent=4, allow_unicode=True,
+                                   encoding="utf-8") + '\n'
+                f.write(l)
+                f.close()
+
         def endInstall(self):
+            self.log.append(u'Finished')
+            self.setProgress.emit(len(self.components))
+            self.is_done = True
+            self.completeChanged.emit()
+
+        def isComplete(self):
+            if self.is_done:
+                self.wizard().finished.emit(1)
+            return self.is_done
+
+    class PreUnInstallPage(QWizardPage):
+        setProgress = pyqtSignal(int)
+        addComponentItem = pyqtSignal(str, str, bool, bool)
+        editComponentItem = pyqtSignal(str, str)
+
+        def __init__(self, parent):
+            QWizardPage.__init__(self)
+            self.parent = parent
+
+            self.setLayout(QGridLayout())
+            self.setTitle('Components')
+            self.setSubTitle('This page cant handle manually installed components')
+
+            self.components_list = QListWidget()
+            self.progress = QProgressBar()
+            self.layout().addWidget(self.progress, 2, 0, 1, 4)
+            self.layout().addWidget(self.components_list, 3, 0, 1, 4)
+
+            self.setProgress.connect(self.progress.setValue)
+
+            self.is_done = False
+
+            self.addComponentItem.connect(self.addListItem)
+            self.setProgress.connect(self.progress.setValue)
+
+            self.components_list.itemChanged.connect(self.completeChanged.emit)
+            self.components_list.itemClicked.connect(self.completeChanged.emit)
+
+        def initializePage(self):
+            schema = Config(open('uninstall.list'))
+            for component in schema.keys():
+                self.addListItem(component, component)
+
+            self.is_done = True
+
+        def isComplete(self):
+            self.wizard().components = self.getComponents
+            return self.is_done and len(self.wizard().components)
+
+
+        @pyqtProperty(list)
+        def getComponents(self):
+            return self.getSelectedItems()
+
+        def getSelectedItems(self):
+            list_widget = self.components_list
+            items = []
+            for i in range(list_widget.count()):
+                item = list_widget.item(i)
+                if item.checkState() == Qt.Checked:
+                    items.append(item)
+
+            return items
+
+
+        def addListItem(self, component, title, valid=True, checked=True):
+            item = QListWidgetItem(title)
+            item.component = component
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            if valid:
+                pass
+            else:
+                item.setForeground(QColor('gray'))
+
+            if checked:
+                item.setCheckState(Qt.Checked)
+            else:
+                item.setCheckState(Qt.Unchecked)
+
+            self.components_list.addItem(item)
+
+
+    class UnInstallPage(QWizardPage):
+        setProgress = pyqtSignal(int)
+        message = pyqtSignal(str)
+
+        def __init__(self, parent):
+            QWizardPage.__init__(self)
+            self.parent = parent
+
+            self.setLayout(QGridLayout())
+            self.setTitle('Uninstallation')
+            self.setSubTitle('All selected components will be removed.')
+
+            self.layout().addWidget(QLabel(u'Uninstallation progress'), 0, 0)
+            self.progress = QProgressBar()
+            self.progress.setMaximum(0)
+            self.layout().addWidget(self.progress, 1, 0, 1, 2)
+
+            self.log = QTextBrowser()
+            self.layout().addWidget(self.log, 2, 0, 1, 2)
+
+            self.setProgress.connect(self.progress.setValue)
+            self.message.connect(self.log.append)
+            self.is_done = False
+
+        def initializePage(self):
+            self.components = self.wizard().components
+            self.startUninstallation()
+
+        def startUninstallation(self):
+            # self.distrib_path = str(self.parent.options.Skyrim.path)
+            self.path = str(self.parent.options.install_path)
+
+            self.schema = Config(open('currentVersion.yml'))
+
+            self.w = Worker(lambda: self.uninstall(self.path, map(lambda x: str(x.component), self.components)))
+            self.w.done.connect(self.endUninstall)
+            self.w.error.connect(self.parent.printError)
+
+            self.w.start()
+
+        def uninstall(self, path, components):
+            self.message.emit('Start uninstalling...')
+            schema = Config(open('uninstall.list'))
+
+            self.progress.setMaximum(len(components))
+
+            i = 0
+            for component in schema.keys():
+                if component in components:
+                    i += 1
+                    self.setProgress.emit(i)
+                    for fl in schema[component]:
+                        if os.path.isfile(fl):
+                            os.remove(fl)
+                        elif os.path.isdir(fl):
+                            if not os.listdir(fl):
+                                os.removedirs(fl)
+
+        def endUninstall(self):
             self.log.append(u'Finished')
             self.is_done = True
             self.completeChanged.emit()
 
         def isComplete(self):
+            if self.is_done:
+                self.wizard().finished.emit(1)
             return self.is_done
 
     def printError(self, e):
         print(e)
 
-    def uninstallFiles(self, path, distrib_path):
-        self.p.setMaximum(len(self.schema.keys()))
-        for i, distr_file in enumerate(self.schema.keys()):
-            self.setProgress.emit(i)
-            print('Remove content of %s' % distr_file)
-            try:
-                filepath = os.path.abspath(os.path.join(distrib_path, distr_file))
-                rf = rarfile.RarFile(filepath)
-                dest_path = os.path.join(path, self.schema[distr_file]['dest'])
-                for f in rf.infolist():
-                    filepath = os.path.join(dest_path, f.filename)
-                    try:
-                        os.remove(filepath)
-                    except:
-                        pass
-            except:
-                pass
 
 

@@ -179,10 +179,10 @@ def check_skywind(skyrim_path):
     data_dir = os.path.join(skyrim_path, data_folder['Skyrim'])
     if os.path.isfile(os.path.join(skyrim_path, data_dir, 'Skywind.esm')):
         f = open(os.path.join(skyrim_path, data_dir, 'Skywind.esm'), 'rb')
-        f.seek(194)
-        version = f.read(4)
+        f.seek(195)
+        version = f.read(3)
         f.close()
-        return 'Skywind.esm version: %s' % version, True
+        return 'Skywind.esm version: <b>v%s</b>' % version, True
     else:
         return 'No Skywind.esm founded', False
 
@@ -211,7 +211,7 @@ def check_valid_exe(game, game_dir):
                 logging.info(reason)
                 return False, reason
     else:
-        reason = 'Folder not exists'
+        reason = 'Cant find %s installation.' % game
         logging.info(reason)
         return False, reason
 

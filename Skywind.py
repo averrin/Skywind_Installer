@@ -24,6 +24,13 @@ DEBUG = False
 if len(sys.argv) > 1 and sys.argv[1] == '--debug':      #TODO: make it right
     DEBUG = True
 
+if hasattr(sys, "frozen") and getattr(sys, "frozen") == "windows_exe":
+    print('Compiled version')
+    # from resources import ResourceFile, FindResource
+    # unrar = FindResource('UNRAR', 1)
+else:
+    print('From sources')
+
 
 class GameInfoPanel(QWidget):
     updated = pyqtSignal()
@@ -41,33 +48,31 @@ class GameInfoPanel(QWidget):
         self.icon = QLabel()
         self.icon.setPixmap(QPixmap('icons/%s.png' % self.game).scaledToWidth(64, Qt.SmoothTransformation))
 
-        self.path_label = QLabel(self.path)
-
         self.browse = QPushButton('Change')
         self.browse.clicked.connect(self.changePath)
 
-        # self.layout().addWidget(self.icon)
-
-        self.info_panel = QWidget()
-        self.info_panel.setLayout(QVBoxLayout())
-
-        path_panel = QWidget()
-        path_panel.setLayout(QHBoxLayout())
-
-        self.layout().addWidget(self.info_panel)
-        path_panel.layout().addWidget(self.path_label)
-        path_panel.layout().addWidget(self.browse)
-
-        self.info_panel.layout().addWidget(path_panel)
+        self.layout().addWidget(self.icon)
 
         self.exe_info, self.exe_valid = self.get_exe_info(self.game, self.path, self.is_steam)
         self.folder_info, self.folder_valid = self.get_folder_info(self.game, self.path)
 
         self.exe_info_label = QLabel(self.exe_info)
         self.folder_info_label = QLabel(self.folder_info)
+        self.browse.setVisible(False)
 
-        self.info_panel.layout().addWidget(self.exe_info_label)
-        self.info_panel.layout().addWidget(self.folder_info_label)
+        self.layout().addWidget(self.exe_info_label)
+        self.layout().addWidget(self.browse)
+        # panel.layout().addWidget(self.folder_info_label, 1, 0)
+
+        if not os.path.isdir(self.path):
+            self.folder_info_label.setVisible(False)
+            self.browse.setVisible(True)
+
+        if not self.exe_valid or not self.folder_valid:
+            self.browse.setVisible(True)
+
+        if self.exe_valid and not self.folder_valid:
+            self.exe_info_label.setText(self.folder_info)
 
         self.layout().setAlignment(Qt.AlignTop | Qt.AlignLeft)
 
@@ -119,11 +124,14 @@ class SkywindPanel(QWidget):
         self.install = QPushButton(u'Install')
         self.installer = Installer(self, self.install)
 
+        self.installer.wizard.finished.connect(self.update)
+        self.installer.unwizard.finished.connect(self.update)
+
         self.icon_name = 'Skywind'
         self.icon = QLabel()
         self.icon.setPixmap(QPixmap('icons/%s.png' % self.icon_name).scaledToWidth(64, Qt.SmoothTransformation))
 
-        # self.layout().addWidget(self.icon)
+        self.layout().addWidget(self.icon)
 
         self.info_str, self.is_valid = check_skywind(self.Skyrim.path)
         self.info = QLabel(self.info_str)
@@ -138,10 +146,10 @@ class SkywindPanel(QWidget):
         self.updateInstallButton()
         self.updated.emit()
 
-
-    def update(self):
+    def update(self, *args):
         self.info_str, self.is_valid = check_skywind(self.Skyrim.path)
         self.info.setText(self.info_str)
+        self.install_path = self.Skyrim.path
         self.updateInstallButton()
         self.updated.emit()
 
@@ -165,11 +173,13 @@ class UI(QMainWindow):
         self.setWindowTitle(u"Skywind" if not DEBUG else 'Skywind [DEBUG]')
         self.setWindowIcon(QIcon('icons/app.png'))
 
+
         panel = QWidget()
         panel.setLayout(QVBoxLayout())
         self.setCentralWidget(panel)
 
-        self.resize(500, 180)
+        panel.resize(500, 100)
+
 
         self.Morrowind = GameInfoPanel('Morrowind')
         self.Skyrim = GameInfoPanel('Skyrim')

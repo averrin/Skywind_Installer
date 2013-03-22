@@ -8,7 +8,7 @@ from collections import OrderedDict
 
 class Mapping(OrderedDict):
     def __unicode__(self):
-        return super().__unicode__()
+        return OrderedDict.__unicode__(self)
 
     def __getattribute__(self, key):
         try:
