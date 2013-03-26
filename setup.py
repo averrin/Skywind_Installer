@@ -17,8 +17,8 @@ setup(
         }
     ],
     options={"py2exe": {
-        "includes": ["sip", "logging", "subprocess", 'json', 'yaml', 'rarfile', '_winreg', 'win32com'],
-        'packages': ['checker', 'config', 'installer', 'resources'],
+        "includes": ["sip", "logging", "subprocess", 'json', 'yaml', 'rarfile', '_winreg', 'win32com', 'Crypto'],
+        'packages': ['checker', 'config', 'installer', 'resources', 'secret'],
         "compressed": 1,
         "optimize": 2,
         'bundle_files': 1}
@@ -29,5 +29,5 @@ setup(
         ('icons', ['icons/app.png', 'icons/Morrowind.png', 'icons/Skyrim.png', 'icons/Skywind.png']),
         ('contrib', ['contrib/vcredist_x86_2008.exe', 'contrib/vcredist_x86_2005.exe'])
     ],
-    zipfile=None,
+    zipfile=None, requires=['Crypto'],
 )

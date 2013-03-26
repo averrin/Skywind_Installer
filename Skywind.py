@@ -10,7 +10,7 @@ logging.basicConfig(format='[%(asctime)s] %(levelname)s:\t\t%(message)s', filena
                     datefmt='%d.%m %H:%M:%S')
 
 __author__ = 'Alexey "Averrin" Nabrodov'
-__version__ = '0.0.3'
+__version__ = '0.0.5'
 
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
