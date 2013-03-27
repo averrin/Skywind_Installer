@@ -799,7 +799,7 @@ if __name__ == '__main__':
     e = Encrypted('skywind', '', {})
     from secret import key
 
-    e.encrypt(key, 'C:\\Dropbox\\bin\\Skywind\\Skywind_open.esm', 'C:\\Dropbox\\bin\\Skywind\Skywind.esm')
+    e.encrypt(key, 'C:\\Dropbox\\bin\\Skywind\\Skywind_open_059.esm', 'C:\\Dropbox\\bin\\Skywind\\Skywind.cmf')
     # e.decrypt(key, 'C:\\Dropbox\\bin\\Skywind\Skywind.esm.enc')
 
 

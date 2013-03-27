@@ -29,5 +29,5 @@ setup(
         ('icons', ['icons/app.png', 'icons/Morrowind.png', 'icons/Skyrim.png', 'icons/Skywind.png']),
         ('contrib', ['contrib/vcredist_x86_2008.exe', 'contrib/vcredist_x86_2005.exe'])
     ],
-    zipfile=None, requires=['Crypto'],
+    zipfile=None, requires=['Crypto', 'requests'],
 )

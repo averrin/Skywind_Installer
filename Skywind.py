@@ -4,6 +4,11 @@
 from __future__ import print_function
 import sys
 import logging
+from PyQt4.QtGui import QWidget, QVBoxLayout, QMainWindow, QIcon, QHBoxLayout, QStatusBar, QSizePolicy, QLabel, QApplication, QPushButton, QPixmap, QFileDialog
+from PyQt4.QtCore import Qt, pyqtSignal
+from PyQt4.QtWebKit import QWebView
+from lxml import etree
+from requests import *
 
 logging.basicConfig(format='[%(asctime)s] %(levelname)s:\t\t%(message)s', filename='skywind.log',
                     level=logging.DEBUG,
@@ -12,17 +17,14 @@ logging.basicConfig(format='[%(asctime)s] %(levelname)s:\t\t%(message)s', filena
 __author__ = 'Alexey "Averrin" Nabrodov'
 __version__ = '0.0.5'
 
-from PyQt4.QtGui import *
-from PyQt4.QtCore import *
-
 from checker import *
-
 from installer import Installer
+from esm_reader import ESMFile, CryptedESMFile
 
 DEBUG = False
 
-if len(sys.argv) > 1 and sys.argv[1] == '--debug':      #TODO: make it right
-    DEBUG = True
+# if len(sys.argv) > 1 and sys.argv[1] == '--debug':      #TODO: make it right
+#     DEBUG = True
 
 if hasattr(sys, "frozen") and getattr(sys, "frozen") == "windows_exe":
     print('Compiled version')
@@ -35,7 +37,7 @@ else:
 class GameInfoPanel(QWidget):
     updated = pyqtSignal()
 
-    def __init__(self, game):
+    def __init__(self, game, force_browse=False):
         self.game = game
         self.is_steam = check_steam(self.game)
         self.path = get_path(self.game, self.is_steam)
@@ -68,7 +70,7 @@ class GameInfoPanel(QWidget):
             self.folder_info_label.setVisible(False)
             self.browse.setVisible(True)
 
-        if not self.exe_valid or not self.folder_valid:
+        if not self.exe_valid or not self.folder_valid or force_browse:
             self.browse.setVisible(True)
 
         if self.exe_valid and not self.folder_valid:
@@ -134,7 +136,27 @@ class SkywindPanel(QWidget):
         self.layout().addWidget(self.icon)
 
         self.info_str, self.is_valid = check_skywind(self.Skyrim.path)
-        self.info = QLabel(self.info_str)
+
+        self.esm = None
+        self.new_esm = None
+
+        if self.is_valid:
+            self.esm = ESMFile(os.path.join(self.install_path, 'Data', 'Skywind.esm'))
+            self.info_str = '<b>Installed:</b> v%s by %s' % (
+            self.esm.esm_info['description'], self.esm.esm_info['developer'])
+            if os.path.isfile('Skywind.cmf'):
+                from secret import key
+
+                self.new_esm = CryptedESMFile(os.path.join(self.distrib_path, 'Skywind.cmf'), key)
+                if self.new_esm.esm_info['description'] != self.esm.esm_info['description']:
+                    self.info_str += '<br><b>Available:</b> v%s by %s' % (
+                        self.new_esm.esm_info['description'],
+                        self.new_esm.esm_info['developer']
+                    )
+                else:
+                    self.info_str += '<br>It is latest version.'
+                    
+            self.info = QLabel(self.info_str)
 
         self.layout().addWidget(self.info)
 
@@ -148,6 +170,18 @@ class SkywindPanel(QWidget):
 
     def update(self, *args):
         self.info_str, self.is_valid = check_skywind(self.Skyrim.path)
+        if self.is_valid:
+            self.esm = ESMFile(os.path.join(self.install_path, 'Data', 'Skywind.esm'))
+            self.info_str = '<b>Installed:</b> v0.%s by %s' % (
+                self.esm.esm_info['description'][-2:], self.esm.esm_info['developer'])
+            if os.path.isfile('Skywind.cmf'):
+                from secret import key
+
+                self.new_esm = CryptedESMFile(os.path.join(self.distrib_path, 'Skywind.cmf'), key)
+                self.info_str += '<br><b>Available:</b> v0.%s by %s' % (
+                    self.new_esm.esm_info['description'][-2:],
+                    self.new_esm.esm_info['developer']
+                )
         self.info.setText(self.info_str)
         self.install_path = self.Skyrim.path
         self.updateInstallButton()
@@ -163,8 +197,49 @@ class SkywindPanel(QWidget):
             self.install.setText('Install')
             self.install.clicked.connect(self.installer.install)
         else:
-            self.install.setText('Uninstall')
-            self.install.clicked.connect(self.installer.uninstall)
+            if self.new_esm is None:
+                self.install.setText('Uninstall')
+                self.install.clicked.connect(self.installer.uninstall)
+            else:
+                self.install.setText('Update')
+
+
+class Browser(QWidget):
+    def __init__(self):
+        QWidget.__init__(self)
+
+        self.setLayout(QVBoxLayout())
+
+        self.view = QWebView()
+        self.layout().addWidget(self.view)
+
+        self.view.setHtml(self.getReadme())
+
+    def getReadme(self):
+        style = 'dark'
+        url = 'http://morroblivion.com/forums/skyrim/skywind-mod-releases/3323'
+        xpath = '//*[@id="node-3323"]/div[2]/div[2]/div'
+
+        page = get(url)
+        tree = etree.HTML(page.content)
+        content = tree.xpath(xpath)[0]
+
+        content = etree.tostring(content, pretty_print=True, method="html")
+
+        css = """
+        <head>
+            <link type="text/css" rel="stylesheet" media="all"
+                href="http://morroblivion.com/sites/all/themes/morroblivion-%s/css/style.css?x" />
+            <style>
+                img {margin: 0px auto; margin-bottom: 10px;}
+                .content {width: 612px; margin: 0 auto; background-color: #323232; padding: 10px}
+            </style>
+        </head>
+        """ % style
+
+        content = '%s<body>%s</body>' % (css, content)
+
+        return content
 
 
 class UI(QMainWindow):
@@ -173,40 +248,39 @@ class UI(QMainWindow):
         self.setWindowTitle(u"Skywind" if not DEBUG else 'Skywind [DEBUG]')
         self.setWindowIcon(QIcon('icons/app.png'))
 
-
         panel = QWidget()
-        panel.setLayout(QVBoxLayout())
+        panel.setLayout(QHBoxLayout())
         self.setCentralWidget(panel)
 
-        panel.resize(500, 100)
+        games_panel = QWidget()
+        games_panel.setLayout(QVBoxLayout())
+        # self.setCentralWidget(games_panel)
 
+        games_panel.resize(500, 100)
 
         self.Morrowind = GameInfoPanel('Morrowind')
-        self.Skyrim = GameInfoPanel('Skyrim')
+        self.Skyrim = GameInfoPanel('Skyrim', force_browse=True)
 
-        panel.layout().addWidget(self.Morrowind)
-        panel.layout().addWidget(self.Skyrim)
+        games_panel.layout().addWidget(self.Morrowind)
+        games_panel.layout().addWidget(self.Skyrim)
 
         self.Skywind = SkywindPanel(self.Skyrim, self.Morrowind)
-        panel.layout().addWidget(self.Skywind)
+        games_panel.layout().addWidget(self.Skywind)
 
         buttons = QWidget()
         buttons.setLayout(QHBoxLayout())
-        panel.layout().addWidget(buttons)
 
+        games_panel.layout().setAlignment(Qt.AlignTop)
 
-        # buttons.layout().addWidget(self.install)
-        # 
-        # exit_button = QPushButton('Exit')
-        # exit_button.clicked.connect(sys.exit)
-        # buttons.layout().addWidget(exit_button)
-
-        panel.layout().setAlignment(Qt.AlignTop)
+        panel.layout().addWidget(Browser())
+        panel.layout().addWidget(games_panel)
 
         self.statusBar = QStatusBar(self)
         self.statusBar.addPermanentWidget(QWidget().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
         self.setStatusBar(self.statusBar)
-        self.statusBar.addPermanentWidget(QLabel(u'Version: %s  ' % __version__))
+        self.statusBar.addPermanentWidget(
+            QLabel(u'by <b>Averrin</b> for <b>Skywind Project</b>. Version: %s  ' % __version__)
+        )
         self.statusBar.setSizeGripEnabled(False)
 
 
