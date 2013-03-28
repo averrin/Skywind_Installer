@@ -1,0 +1,21 @@
+version: 'v056'
+readme:
+  url: http://morroblivion.com/forums/skyrim/archived-topics/4195
+  xpath: '//*[@id="node-4195"]/div[2]/div[2]/div'
+  style: 'dark' 
+components:
+  "Skywind":
+    type: folder
+    dest: 'Data'
+  "Skywind.zip":
+    type: archive
+    dest: 'Data'
+    hash: false
+  "Skywind.cmf":
+    type: encrypted
+    dest: Data/Skywind.esm
+    hash: fef3ea521151af9adfe5c4f777c082b8a40ea8a59465eea0442740983015194f
+    original_hash: 456a88fd382952e66f8f731a9ea8d6f40d2161adf1e2ba6947cd2b7de944234c
+  "Skywind.bsa":
+    type: file
+    dest: 'Data/Skywind.bsa'

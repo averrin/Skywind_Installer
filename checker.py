@@ -184,7 +184,7 @@ def check_skywind(skyrim_path):
         f.close()
         return 'Skywind.esm version: <b>v%s</b>' % version, True
     else:
-        return 'No Skywind.esm founded', False
+        return 'No Skywind.esm found', False
 
 
 def check_valid_exe(game, game_dir):
@@ -199,7 +199,7 @@ def check_valid_exe(game, game_dir):
             if os.path.isfile(morrowind_exe):
                 return exe_info(morrowind_exe)
             else:
-                reason = 'No Morrowind.exe founded'
+                reason = 'No Morrowind.exe found'
                 logging.info(reason)
                 return False, reason
         else:

@@ -8,8 +8,10 @@ import os
 from PyQt4.QtCore import Qt, QObject, pyqtSignal, pyqtProperty, QThread
 from PyQt4.QtGui import QColor, QListWidgetItem, QMessageBox, QLabel, QGridLayout, QWizardPage, QWizard, QLineEdit, QPushButton, QWidget, QListWidget, QProgressBar, QFileDialog, QHBoxLayout, QTextBrowser
 import shutil
+from distutils.dir_util import copy_tree
 
 import random, struct
+import zipfile
 from Crypto.Cipher import AES
 
 __author__ = 'Alexey "Averrin" Nabrodov'
@@ -119,14 +121,14 @@ class Installer(QObject):
 
             self.setLayout(QGridLayout())
             self.setTitle('Options')
-            self.setSubTitle('Please select destination folder and folder which contains distributive files.')
+            self.setSubTitle('Please select destination folder and folder which contains downloaded files.')
 
             self.path = PathPanel(default=self.parent.options.install_path)
             self.layout().addWidget(QLabel('Installation path:'), 1, 0)
             self.layout().addWidget(self.path, 1, 1)
 
             self.distrib_path = PathPanel(default=self.parent.options.distrib_path)
-            self.layout().addWidget(QLabel('Distributive path:'), 2, 0)
+            self.layout().addWidget(QLabel('Downloaded files:'), 2, 0)
             self.layout().addWidget(self.distrib_path, 2, 1)
 
             self.registerField('path', self.path, 'getPath', self.path.path_input.textChanged)
@@ -190,7 +192,7 @@ class Installer(QObject):
             self.startSearchComponents()
 
         def startSearchComponents(self):
-            self.schema = Config(open('currentVersion.yml'))
+            self.schema = Config(open('config/currentVersion.yml'))
 
             self.w = Worker(lambda: self.searchComponent(self.distrib_path))
             self.w.done.connect(self.endSearchComponents)
@@ -297,7 +299,7 @@ class Installer(QObject):
             self.distrib_path = str(self.field('distrib_path').toString())
             self.path = str(self.field('path').toString())
 
-            self.schema = Config(open('currentVersion.yml'))
+            self.schema = Config(open('config/currentVersion.yml'))
 
             self.w = Worker(lambda: self.install(self.distrib_path, self.path))
             self.w.done.connect(self.endInstall)
@@ -317,7 +319,7 @@ class Installer(QObject):
         def generateUninstallList(self, install_path, distrib_path, components):
             self.message.emit(u'Generating uninstall list...')
 
-            with open('uninstall.yml', 'w') as f:
+            with open('config/uninstall.yml', 'w') as f:
                 l = ''
                 for i, component in enumerate(components):
                     file_list = {component.name: component.uninstall_info}
@@ -368,7 +370,7 @@ class Installer(QObject):
         def initializePage(self):
             self.components = []
             self.components_list.clear()
-            schema = Config(open('uninstall.yml'))
+            schema = Config(open('config/uninstall.yml'))
             for component_name in schema.keys():
                 component = Component.create(component_name, None, schema[component_name])
                 if component is not None:
@@ -454,7 +456,7 @@ class Installer(QObject):
         def startUninstallation(self):
             self.path = str(self.parent.options.install_path)
 
-            self.schema = Config(open('currentVersion.yml'))
+            self.schema = Config(open('config/currentVersion.yml'))
 
             self.w = Worker(lambda: self.uninstall(self.path, self.components))
             self.w.done.connect(self.endUninstall)
@@ -464,7 +466,7 @@ class Installer(QObject):
 
         def uninstall(self, path, components):
             self.message.emit('Start uninstalling...')
-            schema = Config(open('uninstall.yml'))
+            schema = Config(open('config/uninstall.yml'))
 
             self.progress.setMaximum(len(components))
 
@@ -502,7 +504,8 @@ class Component(object):
         component_types = {
             'archive': Archive,
             'encrypted': Encrypted,
-            'folder': Folder
+            'folder': Folder,
+            'file': SingleFile
         }
         if 'type' in kwargs:
             component_class = component_types.get(kwargs['type'], None)
@@ -573,8 +576,9 @@ class Archive(Component):
         if not hasattr(self, 'matched'):
             file_path = os.path.abspath(os.path.join(self.src_folder, self.name))
             if hasattr(self, 'hash') and self.hash:
-                hash_sum = hashlib.sha256(open(file_path, 'rb').read()).hexdigest()
-                self.matched = hash_sum == self.hash
+                with open(file_path, 'rb') as f:
+                    hash_sum = hashlib.sha256(f.read()).hexdigest()
+                    self.matched = hash_sum == self.hash
             else:
                 self.matched = True
         return self.matched
@@ -584,11 +588,24 @@ class Archive(Component):
         if message is None:
             message = lambda x: None
         file_path = os.path.abspath(os.path.join(self.src_folder, str(self.name)))
-        rf = rarfile.RarFile(file_path)
         message('Extracting: %s' % self.name)
         dest_path = os.path.join(destination, self.dest)
         message('to %s' % dest_path)
+
+        if self.name.endswith('.rar'):
+            self.extract_rar(file_path, dest_path)
+        elif self.name.endswith('.zip'):
+            self.extract_zip(file_path, dest_path)
+        else:
+            message('Cant handle archive format')
+
+    def extract_rar(self, file_path, dest_path):
+        rf = rarfile.RarFile(file_path)
         rf.extractall(dest_path)
+
+    def extract_zip(self, file_path, dest_path):
+        zf = zipfile.ZipFile(file_path)
+        zf.extractall(dest_path)
 
 
     @property
@@ -596,11 +613,17 @@ class Archive(Component):
         info = {'files': [], 'type': 'archive'}
         if hasattr(self, 'destination'):
             file_path = os.path.abspath(os.path.join(self.src_folder, str(self.name)))
-            rf = rarfile.RarFile(file_path)
-            for fl in rf.infolist():
+            flist = []
+            if self.name.endswith('.rar'):
+                rf = rarfile.RarFile(file_path)
+                flist = map(lambda x: x.filename, rf.infolist())
+            elif self.name.endswith('.zip'):
+                zf = zipfile.ZipFile(file_path)
+                flist = zf.namelist()
+            for fl in flist:
                 info['files'].append(
                     os.path.normpath(
-                        os.path.join(self.destination, self.dest, fl.filename)
+                        os.path.join(self.destination, self.dest, fl)
                     )
                 )
         return info
@@ -661,14 +684,21 @@ class Encrypted(Component):
 
                 outfile.truncate(origsize)
 
+            if hasattr(self, 'original_hash') and self.original_hash:
+                hash_sum = hashlib.sha256(open(out_filename, 'rb').read()).hexdigest()
+                print(hash_sum)
+                if hash_sum != self.original_hash:
+                    raise Exception(u'Hash sum of result not matched with shipped')
+
     @property
     def match(self):
         if not hasattr(self, 'matched'):
             file_path = os.path.abspath(os.path.join(self.src_folder, self.name))
             if hasattr(self, 'hash') and self.hash:
-                hash_sum = hashlib.sha256(open(file_path, 'rb').read()).hexdigest()
-                # print(hash_sum)
-                self.matched = hash_sum == self.hash
+                with open(file_path, 'rb') as f:
+                    hash_sum = hashlib.sha256(f.read()).hexdigest()
+                    print(hash_sum)
+                    self.matched = hash_sum == self.hash
             else:
                 self.matched = True
         return self.matched
@@ -712,15 +742,18 @@ class Encrypted(Component):
         from secret import key
 
         message('Decrypt: %s' % self.name)
-        self.decrypt(key, os.path.join(self.src_folder, self.name), os.path.join(destination, self.dest, self.name))
-        message('Done')
+        try:
+            self.decrypt(key, os.path.join(self.src_folder, self.name), os.path.join(destination, self.dest))
+            message('Done')
+        except Exception, e:
+            message(str(e))
 
     @property
     def uninstall_info(self):
         info = {'files': [], 'type': 'encrypted'}
         if hasattr(self, 'destination'):
             info['files'].append(
-                os.path.normpath(os.path.abspath(os.path.join(self.destination, self.dest, self.name)))
+                os.path.normpath(os.path.abspath(os.path.join(self.destination, self.dest)))
             )
         return info
 
@@ -735,6 +768,7 @@ class Encrypted(Component):
                 if not os.listdir(fl):
                     os.removedirs(fl)
                 message('Removed: %s' % fl)
+
 
 class Folder(Component):
     @property
@@ -764,22 +798,22 @@ class Folder(Component):
             message = lambda x: None
         file_path = os.path.abspath(os.path.join(self.src_folder, self.name))
         message('Copy: %s' % self.name)
-        dest_path = os.path.join(destination, self.dest, self.name)
+        dest_path = os.path.join(destination, self.dest)
         message('to %s' % dest_path)
         try:
             try:
-                shutil.copytree(file_path, dest_path)
+                copy_tree(file_path, dest_path)
             except OSError:
                 shutil.copy(file_path, dest_path)
-        except:
-            message('Error in copy process')
+        except Exception, e:
+            message('Error in copy process: %s' % e)
 
     @property
     def uninstall_info(self):
         info = {'files': [], 'type': 'folder'}
         if hasattr(self, 'destination'):
             info['files'].append(
-                os.path.normpath(os.path.abspath(os.path.join(self.destination, self.dest, self.name)))
+                os.path.normpath(os.path.abspath(os.path.join(self.destination, self.dest)))
             )
         return info
 
@@ -789,10 +823,64 @@ class Folder(Component):
         for fl in schema['files']:
             if os.path.isfile(fl):
                 os.remove(fl)
-                message('Removed: %s' % fl)
             elif os.path.isdir(fl):
                 os.removedirs(fl)
-                message('Removed: %s' % fl)
+            message('Removed: %s' % fl)
+
+
+class SingleFile(Component):
+    @property
+    def available(self):
+        if self.src_folder is not None:
+            file_path = os.path.abspath(os.path.join(self.src_folder, self.name))
+            return os.path.isfile(file_path)
+        else:
+            return True
+
+    @property
+    def default_install(self):
+        return self.available
+
+    @property
+    def title(self):
+        if self.src_folder is not None:
+            return 'Copy file %s' % (
+                self.name
+            )
+        else:
+            return 'Remove file %s' % self.name
+
+    def install(self, destination, message=None):
+        self.destination = destination
+        if message is None:
+            message = lambda x: None
+        file_path = os.path.abspath(os.path.join(self.src_folder, self.name))
+        message('Copy: %s' % self.name)
+        dest_path = os.path.join(destination, self.dest)
+        message('to %s' % dest_path)
+        try:
+            shutil.copy(file_path, dest_path)
+        except Exception, e:
+            message('Error in copy process: %s' % e)
+
+    @property
+    def uninstall_info(self):
+        info = {'files': [], 'type': 'file'}
+        if hasattr(self, 'destination'):
+            info['files'].append(
+                os.path.normpath(os.path.abspath(os.path.join(self.destination, self.dest)))
+            )
+        return info
+
+    def uninstall(self, schema, message=None):
+        if message is None:
+            message = lambda x: None
+        for fl in schema['files']:
+            if os.path.isfile(fl):
+                os.remove(fl)
+            elif os.path.isdir(fl):
+                os.removedirs(fl)
+            message('Removed: %s' % fl)
 
 
 if __name__ == '__main__':

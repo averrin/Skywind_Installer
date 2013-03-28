@@ -48,6 +48,8 @@ class ESMFile(file):
 
         self.offset = offset
 
+        self.close()  # bad
+
         # print(self.esm_info)
 
     def readString(self, offset):
@@ -71,10 +73,10 @@ class CryptedESMFile(ESMFile):
             self.decryptor = AES.new(self.key, AES.MODE_CBC, iv)
 
             first_chunk = orig.read(512)
-            with file('header.tmp', 'wb') as header:
+            with file('config/header.tmp', 'wb') as header:
                 header.write(self.decryptor.decrypt(first_chunk))
 
-        ESMFile.__init__(self, 'header.tmp')
+        ESMFile.__init__(self, 'config/header.tmp')
 
 
 def main():

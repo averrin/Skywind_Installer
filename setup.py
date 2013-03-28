@@ -2,8 +2,8 @@ from distutils.core import setup
 import py2exe
 from resources import ResourceFile
 
-UNRAR = open('unrar.exe', 'rb').read()
-MSVCP90 = open('C:\\Dropbox\\developers\\interpreters\\Python2\\DLLs\\MSVCP90.dll', 'rb').read()
+# UNRAR = open('unrar.exe', 'rb').read()
+# MSVCP90 = open('C:\\Dropbox\\developers\\interpreters\\Python2\\DLLs\\MSVCP90.dll', 'rb').read()
 
 setup(
     windows=[
@@ -17,17 +17,27 @@ setup(
         }
     ],
     options={"py2exe": {
-        "includes": ["sip", "logging", "subprocess", 'json', 'yaml', 'rarfile', '_winreg', 'win32com', 'Crypto'],
+        "includes": [
+            "sip", "logging", "subprocess", 'json', 'yaml',
+            'rarfile', '_winreg', 'win32com', 'Crypto',
+            'PyQt4.QtNetwork', 'requests', 'lxml._elementpath', 'distutils'
+        ],
         'packages': ['checker', 'config', 'installer', 'resources', 'secret'],
+        'excludes': ['_gtkagg', '_tkagg', 'bsddb', 'curses', 'email', 'pywin.debugger',
+                     'pywin.debugger.dbgcon', 'pywin.dialogs', 'tcl',
+                     'Tkconstants', 'Tkinter'],
         "compressed": 1,
         "optimize": 2,
         'bundle_files': 1}
     },
     data_files=[
-        ('.', ['unrar.exe', 'C:\\Dropbox\\developers\\interpreters\\Python2\\DLLs\\MSVCP90.dll']),
-        ('.', ['currentVersion.yml']),
-        ('icons', ['icons/app.png', 'icons/Morrowind.png', 'icons/Skyrim.png', 'icons/Skywind.png']),
-        ('contrib', ['contrib/vcredist_x86_2008.exe', 'contrib/vcredist_x86_2005.exe'])
+        ('.', []),
+        ('config', [
+            'config/currentVersion.yml'
+        ]),
+        ('config/icons', ['config/icons/app.png', 'config/icons/Morrowind.png', 'config/icons/Skyrim.png', 'config/icons/Skywind.png']),
+        ('config/contrib', ['config/contrib/vcredist_x86_2008.exe', 'config/contrib/vcredist_x86_2005.exe',
+                                'config/contrib/unrar.exe', 'C:\\Dropbox\\developers\\interpreters\\Python2\\DLLs\\MSVCP90.dll'])
     ],
-    zipfile=None, requires=['Crypto', 'requests'],
+    zipfile=None,
 )
