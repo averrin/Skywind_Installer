@@ -3,6 +3,7 @@
 
 from __future__ import print_function
 import hashlib
+from subprocess import Popen, PIPE
 import sys
 import os
 from PyQt4.QtCore import Qt, QObject, pyqtSignal, pyqtProperty, QThread
@@ -13,6 +14,7 @@ from distutils.dir_util import copy_tree
 import random, struct
 import zipfile
 from Crypto.Cipher import AES
+import py7zlib
 
 __author__ = 'Alexey "Averrin" Nabrodov'
 __version__ = '0.0.3'
@@ -41,8 +43,10 @@ class Worker(QThread):
 class PathPanel(QWidget):
     updated = pyqtSignal()
 
-    def __init__(self, default='', button_title='...'):
+    def __init__(self, default='', button_title='...', select_dir=True):
         QWidget.__init__(self)
+
+        self.select_dir = select_dir
 
         self.path_input = QLineEdit(default)
         self.browse_button = QPushButton(button_title)
@@ -54,12 +58,15 @@ class PathPanel(QWidget):
         self.layout().addWidget(self.browse_button)
 
     def browse(self):
-        path = QFileDialog.getExistingDirectory(self, u'Choose folder', '')
+        if self.select_dir:
+            path = QFileDialog.getExistingDirectory(self, u'Choose folder', '')
+        else:
+            path = QFileDialog.getSaveFileName(self, u'Save as', '')
         if path:
             self.setPath(path)
 
     def setPath(self, path):
-        if os.path.isdir(path):
+        if (self.select_dir and os.path.isdir(path)) or not self.select_dir:
             self.path_input.setText(path)
         else:
             QMessageBox.warning(self, u'Error', u'Incorrect path')
@@ -73,7 +80,7 @@ class PathPanel(QWidget):
 class Installer(QObject):
     setProgress = pyqtSignal(int)
 
-    def __init__(self, options, firer):
+    def __init__(self, options, schema, firer):
 
         QObject.__init__(self)
         if not hasattr(options, 'install_path') or not hasattr(options, 'distrib_path'):
@@ -81,16 +88,20 @@ class Installer(QObject):
             firer.setEnabled(False)
             return
 
+        self.schema = schema
+
         self.options = options
         self.firer = firer
 
         self.wizard = QWizard()
         self.wizard.setOptions(QWizard.NoBackButtonOnStartPage | QWizard.NoBackButtonOnLastPage)
         self.wizard.resize(800, 600)
+        self.wizard.schema = schema
 
         self.unwizard = QWizard()
         self.unwizard.setOptions(QWizard.NoBackButtonOnStartPage | QWizard.NoBackButtonOnLastPage)
         self.unwizard.resize(800, 600)
+        self.unwizard.schema = schema
 
         self.pip = self.PreInstallPage(self)
         self.cp = self.CheckPage(self)
@@ -192,8 +203,6 @@ class Installer(QObject):
             self.startSearchComponents()
 
         def startSearchComponents(self):
-            self.schema = Config(open('config/currentVersion.yml'))
-
             self.w = Worker(lambda: self.searchComponent(self.distrib_path))
             self.w.done.connect(self.endSearchComponents)
             self.w.error.connect(self.parent.printError)
@@ -251,10 +260,11 @@ class Installer(QObject):
 
             self.setProgress.emit(0)
 
-            self.progress.setMaximum(len(self.schema.components.keys()))
+            self.progress.setMaximum(len(self.wizard().schema.components.keys()))
 
-            for i, component_name in enumerate(self.schema.components.keys()):
-                component = Component.create(component_name, distrib_path, self.schema.components[component_name])
+            for i, component_name in enumerate(self.wizard().schema.components.keys()):
+                component = Component.create(component_name, distrib_path,
+                                             self.wizard().schema.components[component_name])
                 self.setProgress.emit(i)
                 if component is not None:
                     self.addComponentItem.emit(
@@ -265,7 +275,7 @@ class Installer(QObject):
                     )
                     self.components.append(component)
 
-            self.setProgress.emit(len(self.schema.components.keys()))
+            self.setProgress.emit(len(self.wizard().schema.components.keys()))
 
     class InstallPage(QWizardPage):
         setProgress = pyqtSignal(int)
@@ -298,8 +308,6 @@ class Installer(QObject):
         def startInstallation(self):
             self.distrib_path = str(self.field('distrib_path').toString())
             self.path = str(self.field('path').toString())
-
-            self.schema = Config(open('config/currentVersion.yml'))
 
             self.w = Worker(lambda: self.install(self.distrib_path, self.path))
             self.w.done.connect(self.endInstall)
@@ -456,8 +464,6 @@ class Installer(QObject):
         def startUninstallation(self):
             self.path = str(self.parent.options.install_path)
 
-            self.schema = Config(open('config/currentVersion.yml'))
-
             self.w = Worker(lambda: self.uninstall(self.path, self.components))
             self.w.done.connect(self.endUninstall)
             self.w.error.connect(self.parent.printError)
@@ -596,8 +602,17 @@ class Archive(Component):
             self.extract_rar(file_path, dest_path)
         elif self.name.endswith('.zip'):
             self.extract_zip(file_path, dest_path)
+        elif self.name.endswith('.7z'):
+            self.extract_7z(file_path, dest_path)
         else:
             message('Cant handle archive format')
+
+    def extract_7z(self, file_path, dest_path):
+        cmd = ['7z.exe', 'x', '-y', '-o' + dest_path, file_path]
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE)
+        out = p.communicate()[0].strip().split('\r\n')
+        if out[-2] == 'Error:':
+            raise Exception('Error during extraction')
 
     def extract_rar(self, file_path, dest_path):
         rf = rarfile.RarFile(file_path)
@@ -620,6 +635,10 @@ class Archive(Component):
             elif self.name.endswith('.zip'):
                 zf = zipfile.ZipFile(file_path)
                 flist = zf.namelist()
+            elif self.name.endswith('.7z'):
+                cmd = ['7z.exe', 'l', file_path]
+                p = Popen(cmd, stdout=PIPE, stderr=PIPE)
+                flist = [ln.split('  ')[-1].strip() for ln in p.communicate()[0].split('\r\n')[16:-3]]
             for fl in flist:
                 info['files'].append(
                     os.path.normpath(

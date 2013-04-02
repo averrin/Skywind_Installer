@@ -20,7 +20,7 @@ arch = platform.machine()
 REG_KEYS = {'HKEY_LOCAL_MACHINE': winreg.HKEY_LOCAL_MACHINE, 'HKEY_CURRENT_USER': winreg.HKEY_CURRENT_USER,
             'HKLM': winreg.HKEY_LOCAL_MACHINE, 'HKCU': winreg.HKEY_CURRENT_USER, }
 
-STEAM_ID = {'Morrowind': 22320, 'Skyrim': 72850}
+STEAM_ID = {'Morrowind': 22320, 'Skyrim': 72850, 'Oblivion': 22330}
 
 if arch == 'AMD64':
     wow = 'Wow6432Node\\'
@@ -30,11 +30,12 @@ else:
 app_path = 'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\morrowind.exe'
 path = {
     'Morrowind': 'HKEY_LOCAL_MACHINE\\SOFTWARE\\%sBethesda Softworks\\Morrowind',
-    'Skyrim': 'HKEY_LOCAL_MACHINE\\SOFTWARE\\%sBethesda Softworks\\Skyrim'}
+    'Skyrim': 'HKEY_LOCAL_MACHINE\\SOFTWARE\\%sBethesda Softworks\\Skyrim',
+    'Oblivion': 'HKEY_LOCAL_MACHINE\\SOFTWARE\\%sBethesda Softworks\\Oblivion'}
 uninstall_steam = 'HKEY_LOCAL_MACHINE\\SOFTWARE\\%%sMicrosoft\\Windows\\CurrentVersion\\Uninstall\\Steam App %s' % STEAM_ID
 steam_path = 'HKEY_CURRENT_USER\\Software\\Valve\\Steam'
 steam_postfix = '\\Apps\\%s'
-data_folder = {'Morrowind': 'Data Files', 'Skyrim': 'Data'}
+data_folder = {'Morrowind': 'Data Files', 'Skyrim': 'Data', 'Oblivion': 'Data'}
 
 versions = {
     '38268efe176de02193ed8b5babb20d6231f1324113c65b7fc5308e51d4fde5d3': {
@@ -175,16 +176,16 @@ def check_valid_folder(game, game_dir):
     return False, reason
 
 
-def check_skywind(skyrim_path):
+def check_mod(mod, skyrim_path):
     data_dir = os.path.join(skyrim_path, data_folder['Skyrim'])
-    if os.path.isfile(os.path.join(skyrim_path, data_dir, 'Skywind.esm')):
-        f = open(os.path.join(skyrim_path, data_dir, 'Skywind.esm'), 'rb')
-        f.seek(195)
-        version = f.read(3)
-        f.close()
-        return 'Skywind.esm version: <b>v%s</b>' % version, True
+    if os.path.isfile(os.path.join(skyrim_path, data_dir, '%s.esm' % mod)):
+        # f = open(os.path.join(skyrim_path, data_dir, '%s.esm' % mod), 'rb')
+        # f.seek(195)
+        # version = f.read(3)
+        # f.close()
+        return '', True
     else:
-        return 'No Skywind.esm found', False
+        return 'No %s.esm found' % mod, False
 
 
 def check_valid_exe(game, game_dir):
@@ -202,12 +203,20 @@ def check_valid_exe(game, game_dir):
                 reason = 'No Morrowind.exe found'
                 logging.info(reason)
                 return False, reason
-        else:
+        elif game == 'Skyrim':
             exe = os.path.join(game_dir, 'TESV.exe')
             if os.path.isfile(exe):
                 return exe_info(exe)
             else:
                 reason = 'Cant find TESV.exe'
+                logging.info(reason)
+                return False, reason
+        elif game == 'Oblivion':
+            exe = os.path.join(game_dir, 'Oblivion.exe')
+            if os.path.isfile(exe):
+                return exe_info(exe)
+            else:
+                reason = 'Cant find Oblivion.exe'
                 logging.info(reason)
                 return False, reason
     else:

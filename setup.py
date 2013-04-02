@@ -8,7 +8,7 @@ from resources import ResourceFile
 setup(
     windows=[
         {
-            "script": "Skywind.py",
+            "script": "TransTES.py",
             # "icon_resources": [(0, "app.ico")],
             'other_resources': [
                 # (u"UNRAR", 1, ResourceFile('unrar.exe', UNRAR).get_buffer()),
@@ -33,7 +33,7 @@ setup(
     data_files=[
         ('.', []),
         ('config', [
-            'config/currentVersion.yml'
+            'config/Skywind.yml'
         ]),
         ('config/icons', ['config/icons/app.png', 'config/icons/Morrowind.png', 'config/icons/Skyrim.png', 'config/icons/Skywind.png']),
         ('config/contrib', ['config/contrib/vcredist_x86_2008.exe', 'config/contrib/vcredist_x86_2005.exe',

@@ -1,7 +1,7 @@
 version: 'v056'
 readme:
-  url: http://morroblivion.com/forums/skyrim/archived-topics/4195
-  xpath: '//*[@id="node-4195"]/div[2]/div[2]/div'
+  url: http://morroblivion.com/forums/skyrim/skyblivion-mod-releases/4122
+  xpath: '//*[@id="node-4122"]/div[2]/div[2]/div'
   style: 'dark' 
 components:
   "Skywind":

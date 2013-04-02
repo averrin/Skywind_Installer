@@ -4,6 +4,11 @@ from Crypto.Cipher import AES
 
 __author__ = 'a.nabrodov'
 
+import os
+temp_folder = 'config/temp/'
+if not os.path.isdir(temp_folder):
+    os.mkdir(temp_folder)
+
 
 class ESMFile(file):
     def __init__(self, filename):
@@ -73,10 +78,10 @@ class CryptedESMFile(ESMFile):
             self.decryptor = AES.new(self.key, AES.MODE_CBC, iv)
 
             first_chunk = orig.read(512)
-            with file('config/header.tmp', 'wb') as header:
+            with file(temp_folder + 'header.tmp', 'wb') as header:
                 header.write(self.decryptor.decrypt(first_chunk))
 
-        ESMFile.__init__(self, 'config/header.tmp')
+        ESMFile.__init__(self, temp_folder + 'header.tmp')
 
 
 def main():
