@@ -35,7 +35,7 @@ path = {
 uninstall_steam = 'HKEY_LOCAL_MACHINE\\SOFTWARE\\%%sMicrosoft\\Windows\\CurrentVersion\\Uninstall\\Steam App %s' % STEAM_ID
 steam_path = 'HKEY_CURRENT_USER\\Software\\Valve\\Steam'
 steam_postfix = '\\Apps\\%s'
-data_folder = {'Morrowind': 'Data Files', 'Skyrim': 'Data', 'Oblivion': 'Data'}
+data_folder = {'Morrowind': u'Data Files', 'Skyrim': u'Data', 'Oblivion': u'Data'}
 
 versions = {
     '38268efe176de02193ed8b5babb20d6231f1324113c65b7fc5308e51d4fde5d3': {
@@ -178,7 +178,7 @@ def check_valid_folder(game, game_dir):
 
 def check_mod(mod, skyrim_path):
     data_dir = os.path.join(skyrim_path, data_folder['Skyrim'])
-    if os.path.isfile(os.path.join(skyrim_path, data_dir, '%s.esm' % mod)):
+    if os.path.isfile(os.path.join(skyrim_path, data_dir, u'%s.esm' % mod)):
         # f = open(os.path.join(skyrim_path, data_dir, '%s.esm' % mod), 'rb')
         # f.seek(195)
         # version = f.read(3)
@@ -191,8 +191,8 @@ def check_mod(mod, skyrim_path):
 def check_valid_exe(game, game_dir):
     if os.path.isdir(game_dir):
         if game == 'Morrowind':
-            morrowind_exe = os.path.join(game_dir, 'Morrowind.exe')
-            morrowind_original_exe = os.path.join(game_dir, 'Morrowind.Original.exe')
+            morrowind_exe = os.path.join(game_dir, u'Morrowind.exe')
+            morrowind_original_exe = os.path.join(game_dir, u'Morrowind.Original.exe')
 
             if os.path.isfile(morrowind_original_exe):
                 morrowind_exe = morrowind_original_exe
@@ -204,7 +204,7 @@ def check_valid_exe(game, game_dir):
                 logging.info(reason)
                 return False, reason
         elif game == 'Skyrim':
-            exe = os.path.join(game_dir, 'TESV.exe')
+            exe = os.path.join(game_dir, u'TESV.exe')
             if os.path.isfile(exe):
                 return exe_info(exe)
             else:
@@ -212,7 +212,7 @@ def check_valid_exe(game, game_dir):
                 logging.info(reason)
                 return False, reason
         elif game == 'Oblivion':
-            exe = os.path.join(game_dir, 'Oblivion.exe')
+            exe = os.path.join(game_dir, u'Oblivion.exe')
             if os.path.isfile(exe):
                 return exe_info(exe)
             else:

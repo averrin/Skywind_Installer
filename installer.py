@@ -66,6 +66,7 @@ class PathPanel(QWidget):
             self.setPath(path)
 
     def setPath(self, path):
+        path = unicode(path)
         if (self.select_dir and os.path.isdir(path)) or not self.select_dir:
             self.path_input.setText(path)
         else:
@@ -74,7 +75,7 @@ class PathPanel(QWidget):
 
     @pyqtProperty(str)
     def getPath(self):
-        return str(self.path_input.text())
+        return unicode(self.path_input.text())
 
 
 class Installer(QObject):
@@ -196,7 +197,7 @@ class Installer(QObject):
 
         def initializePage(self):
             self.components = []
-            self.distrib_path = str(self.field('distrib_path').toString())
+            self.distrib_path = unicode(self.field('distrib_path').toString())
             self.status_label.setText('Search components in %s...' % self.distrib_path)
             self.components_list.clear()
             self.progress.setMaximum(0)
@@ -306,8 +307,8 @@ class Installer(QObject):
             self.startInstallation()
 
         def startInstallation(self):
-            self.distrib_path = str(self.field('distrib_path').toString())
-            self.path = str(self.field('path').toString())
+            self.distrib_path = unicode(self.field('distrib_path').toString())
+            self.path = unicode(self.field('path').toString())
 
             self.w = Worker(lambda: self.install(self.distrib_path, self.path))
             self.w.done.connect(self.endInstall)
@@ -462,7 +463,7 @@ class Installer(QObject):
             self.startUninstallation()
 
         def startUninstallation(self):
-            self.path = str(self.parent.options.install_path)
+            self.path = unicode(self.parent.options.install_path)
 
             self.w = Worker(lambda: self.uninstall(self.path, self.components))
             self.w.done.connect(self.endUninstall)
@@ -593,7 +594,7 @@ class Archive(Component):
         self.destination = destination
         if message is None:
             message = lambda x: None
-        file_path = os.path.abspath(os.path.join(self.src_folder, str(self.name)))
+        file_path = os.path.abspath(os.path.join(self.src_folder, unicode(self.name)))
         message('Extracting: %s' % self.name)
         dest_path = os.path.join(destination, self.dest)
         message('to %s' % dest_path)
@@ -627,7 +628,7 @@ class Archive(Component):
     def uninstall_info(self):
         info = {'files': [], 'type': 'archive'}
         if hasattr(self, 'destination'):
-            file_path = os.path.abspath(os.path.join(self.src_folder, str(self.name)))
+            file_path = os.path.abspath(os.path.join(self.src_folder, unicode(self.name)))
             flist = []
             if self.name.endswith('.rar'):
                 rf = rarfile.RarFile(file_path)

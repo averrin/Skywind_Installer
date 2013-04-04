@@ -7,7 +7,7 @@ import re
 import shutil
 import sys
 import logging
-from PyQt4.QtGui import QWidget, QVBoxLayout, QMainWindow, QIcon, QHBoxLayout, QStatusBar, QSizePolicy, QLabel, QApplication, QPushButton, QPixmap, QFileDialog, QMessageBox, QToolBar, QDockWidget, QStackedWidget, QAction, QToolButton
+from PyQt4.QtGui import QWidget, QVBoxLayout, QMainWindow, QIcon, QHBoxLayout, QStatusBar, QSizePolicy, QLabel, QApplication, QPushButton, QPixmap, QFileDialog, QMessageBox, QToolBar, QDockWidget, QStackedWidget, QAction, QToolButton, QTextBrowser
 from PyQt4.QtCore import Qt, pyqtSignal, QSize
 from PyQt4.QtWebKit import QWebView
 from lxml import etree
@@ -35,7 +35,7 @@ else:
 
 unrar = os.path.join(os.environ['SYSTEMROOT'], 'unrar.exe')
 if not os.path.isfile(unrar):
-    shutil.copy('config/contrib/unrar.exe', unrar)
+    shutil.copy(os.path.abspath('config/contrib/unrar.exe'), unrar)
 
 sz = os.path.join(os.environ['SYSTEMROOT'], '7z.exe')
 if not os.path.isfile(sz):
@@ -118,7 +118,8 @@ class GameInfoPanel(QWidget):
     def changePath(self):
         path = QFileDialog.getExistingDirectory(self, u'%s folder' % self.game, '')
         if path:
-            self.path = str(path)
+            self.is_steam = False
+            self.path = unicode(path)
             self.exe_info, self.exe_valid = self.get_exe_info(self.game, self.path, self.is_steam)
             self.folder_info, self.folder_valid = self.get_folder_info(self.game, self.path)
 
@@ -151,12 +152,13 @@ class ModInfoPanel(QWidget):
         self.parent = parent_game
 
         self.parent.updated.connect(self.updateInfo)
+        self.child.updated.connect(self.updateInfo)
 
         QWidget.__init__(self)
         self.setLayout(QHBoxLayout())
 
         self.install_path = self.parent.path
-        self.distrib_path = os.path.abspath('Data Files')
+        self.distrib_path = os.path.abspath(u'Data Files')
         self.install = QPushButton(u'Install')
         self.uninstall = QPushButton(u'Uninstall')
 
@@ -226,7 +228,7 @@ class ModInfoPanel(QWidget):
 
     def setVersion(self):
         if self.is_valid:
-            self.esm = ESMFile(os.path.join(self.install_path, 'Data', '%s.esm' % self.name))
+            self.esm = ESMFile(os.path.join(self.install_path, u'Data', u'%s.esm' % self.name))
             if re.match('\d\.\d\.\d', self.esm.esm_info['description']):
                 self.info_str = '<b>Installed:</b> v%s by %s' % (
                     self.esm.esm_info['description'], self.esm.esm_info['developer'])
@@ -235,7 +237,7 @@ class ModInfoPanel(QWidget):
             if os.path.isfile(os.path.join(self.distrib_path, '%s.cmf' % self.name)):
                 from secret import key
 
-                self.new_esm = CryptedESMFile(os.path.join(self.distrib_path, '%s.cmf' % self.name), key)
+                self.new_esm = CryptedESMFile(os.path.join(self.distrib_path, u'%s.cmf' % self.name), key)
                 if self.new_esm.esm_info['description'] != self.esm.esm_info['description']:
                     self.led.setPixmap(QPixmap(icons_folder + 'emblems/orange.png'))
                     self.info_str += '<br><b>Available:</b> v%s by %s' % (
@@ -249,10 +251,11 @@ class ModInfoPanel(QWidget):
 
     def updateInfo(self, *args):
         self.info_str, self.is_valid = check_mod(self.name, self.parent.path)
-        self.setVersion()
+        # self.setVersion()
         self.info.setText(self.info_str)
         self.install_path = self.parent.path
         self.updateInstallButton()
+        self.setVersion()
         self.updated.emit()
 
     def updateInstallButton(self):
@@ -268,6 +271,12 @@ class ModInfoPanel(QWidget):
             self.install.setText('Update')
             self.install.clicked.connect(self.installer.install)
             self.uninstall.setVisible(True)
+
+
+        if self.child.is_valid():
+            self.install.setEnabled(True)
+        else:
+            self.install.setEnabled(False)
 
 
 class Browser(QWidget):
@@ -437,7 +446,7 @@ class UI(QMainWindow):
 
         self.sizeHint = QSize(500, 100)
 
-        self.dm = DM()
+        self.dm = DM(os.path.abspath(u'Data Files'))
         # self.dm.onShow = lambda: self.setMaximumWidth(games_panel.width())
         self.readme = Browser()
         # self.readme.onShow = lambda: self.setMaximumWidth(games_panel.width())
@@ -483,7 +492,11 @@ if __name__ == '__main__':
             fp = sys.argv[2]
             with open(fp, 'rb') as f:
                 hash = hashlib.sha256(f.read()).hexdigest()
-                QMessageBox.information(QWidget(), u'Hash sum', u'%s: %s' % (fp, hash))
+                msgBox = QTextBrowser()
+                msgBox.setText(u'Hash sum calculated\nhash: %s' % hash)
+                msgBox.resize(500, 100)
+                msgBox.show()
+                qtapp.exec_()
                 sys.exit(0)
         elif sys.argv[1] == '--encrypt' and len(sys.argv) > 3:
             e = Encrypted('new', '', {})
@@ -494,6 +507,11 @@ if __name__ == '__main__':
                 original_hash = hashlib.sha256(f.read()).hexdigest()
             with open(sys.argv[2], 'rb') as f:
                 hash = hashlib.sha256(f.read()).hexdigest()
-            QMessageBox.information(QWidget(), u'Encryption', u'hash: %s\noriginal_hash: %s' % (hash, original_hash))
+
+            msgBox = QTextBrowser()
+            msgBox.setText(u'File encrypted. Hash sums:\nhash: %s\noriginal_hash: %s' % (hash, original_hash))
+            msgBox.resize(500, 100)
+            msgBox.show()
+            qtapp.exec_()
             sys.exit(0)
     main()

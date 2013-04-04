@@ -305,6 +305,8 @@ class HTTPDownload():
                         print(self.info, failed, init not in failed, init.c not in chunksDone)
                         self.info.save()
                     elif failed:
+                    # error: (28, 'Operation too slow. Less than 5 bytes/sec transfered the last 45 seconds')
+
                         raise ex
 
                     lastFinishCheck = t

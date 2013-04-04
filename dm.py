@@ -79,7 +79,7 @@ class GDPlugin(Plugin):
                 dest = os.path.join('.', r['originalFilename'])
                 size = int(r['fileSize'])
             except KeyError:
-
+                print(r)
                 self.renewToken()
                 return self._process(url, dest)
 
@@ -101,7 +101,7 @@ class GDPlugin(Plugin):
                 'client_secret': GD_API_SECRET,
                 'grant_type': 'refresh_token'})
 
-            print(r)
+            print(r.json())
             token = r.json()['access_token']
 
             auth[1] = token
@@ -156,14 +156,16 @@ class Downloader(QThread):
         self.src = src
         self.dest = dest
         self.suspended = False
+        QThread.__init__(self)
+
+        # try:
 
         self.gd = GDPlugin()
 
-        src, self.dest, headers, size = self.gd.processURL(self.src, self.dest)
+        self.real_src, self.dest, headers, size = self.gd.processURL(self.src, self.dest)
 
-        QThread.__init__(self)
         self.dwnld = HTTPDownload(
-            src, self.dest,
+            self.real_src, self.dest,
             callback=self.progress.emit,
             bf_callback=self.flush.emit,
             abort_callback=self.stopped.emit,
@@ -171,6 +173,11 @@ class Downloader(QThread):
             headers=headers,
             gd=size
         )
+
+        # except Exception, e:
+        #     raise e
+            # self.info.setText('<b style="color: red">%s</b>' % e)
+
 
     def run(self):
         self.started.emit()
@@ -259,7 +266,16 @@ class DMItem(QWidget):
             self.finish()
             if type(e) not in [basestring, Exception]:
                 try:
-                    e = e[1]
+                    code, e = e
+
+                    if code == 28:
+                        self.d.dwnld.abort = True
+                        sleep(1)
+                        self.toggleDownloading()
+                        self.initDownloader()
+                        self.start()
+                        return
+
                 except IndexError:
                     pass
             self.info.setText('<b style="color: red">%s</b>' % e)

@@ -1,5 +1,6 @@
 import hashlib
 import struct
+from tempfile import NamedTemporaryFile
 from Crypto.Cipher import AES
 
 __author__ = 'a.nabrodov'
@@ -78,10 +79,12 @@ class CryptedESMFile(ESMFile):
             self.decryptor = AES.new(self.key, AES.MODE_CBC, iv)
 
             first_chunk = orig.read(512)
-            with file(temp_folder + 'header.tmp', 'wb') as header:
+            with NamedTemporaryFile('wb', delete=False) as header:
                 header.write(self.decryptor.decrypt(first_chunk))
+                fn = header.name
 
-        ESMFile.__init__(self, temp_folder + 'header.tmp')
+        ESMFile.__init__(self, fn)
+        os.unlink(fn)
 
 
 def main():
