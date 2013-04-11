@@ -1,10 +1,12 @@
-version: 'v056'
 readme:
-  url: http://morroblivion.com/forums/skyrim/archived-topics/4195
-  xpath: '//*[@id="node-4195"]/div[2]/div[2]/div'
-  style: 'dark' 
-components:
-  "test.7z":
-    type: archive
-    dest: 'Data'
-    hash: false
+    url: http://morroblivion.com/forums/skyrim/archived-topics/4195
+    xpath: '//*[@id="node-4195"]/div[2]/div[2]/div'
+    style: 'dark'
+versions:
+  "0.6.0":
+    components:
+      "test.7z":
+        type: archive
+        dest: 'Data'
+        hash: false
+        optional: true

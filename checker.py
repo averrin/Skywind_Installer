@@ -14,6 +14,7 @@ except ImportError:
 import platform
 import hashlib
 from win32com.client import Dispatch
+import logging
 
 arch = platform.machine()
 
@@ -74,6 +75,7 @@ for p in path:
 # uninstall = uninstall_steam % wow
 
 def check_steam(game):
+    logging.info('Checking steam for %s' % game)
     try:
         installed = int(get_reg_value(get_reg_key(steam_path + steam_postfix % STEAM_ID[game]), 'Installed'))
         if installed:
@@ -91,7 +93,9 @@ def get_reg_key(key):
     else:
         raise Exception('Wrong key format')
 
-    return winreg.OpenKey(parent, key)
+    k = winreg.OpenKey(parent, key)
+    logging.info("Looking for %s" % key)
+    return k
 
 
 def enum_reg_values(key):
@@ -110,11 +114,14 @@ def enum_reg_values(key):
 
 
 def get_reg_value(key, subkey):
+    logging.info('Reading reg key %s\\%s' % (key, subkey))
     result = winreg.QueryValueEx(key, subkey)[0]
+    logging.debug('\t %s' % result)
     return result
 
 
 def exe_info(path):
+    logging.info('Get exe info for %s' % path)
     m = hashlib.sha256(open(path, 'rb').read())
 
     ver_parser = Dispatch('Scripting.FileSystemObject')
@@ -125,7 +132,9 @@ def exe_info(path):
         reason = 'Morrowind.exe was cracked'
         return False, reason
     else:
-        return (hash, version, versions[hash]['desc'] if hash in versions else 'Unknown exe'), None
+        info = (hash, version, versions[hash]['desc'] if hash in versions else 'Unknown exe')
+        logging.debug('\t %s' % str(info))
+        return info, None
 
 
 def get_path(game, is_steam=False):
@@ -189,6 +198,7 @@ def check_mod(mod, skyrim_path):
 
 
 def check_valid_exe(game, game_dir):
+    logging.info('Checking installation of %s in %s' % (game, game_dir))
     if os.path.isdir(game_dir):
         if game == 'Morrowind':
             morrowind_exe = os.path.join(game_dir, u'Morrowind.exe')
@@ -201,7 +211,7 @@ def check_valid_exe(game, game_dir):
                 return exe_info(morrowind_exe)
             else:
                 reason = 'No Morrowind.exe found'
-                logging.info(reason)
+                logging.debug('\t' + reason)
                 return False, reason
         elif game == 'Skyrim':
             exe = os.path.join(game_dir, u'TESV.exe')
@@ -209,7 +219,7 @@ def check_valid_exe(game, game_dir):
                 return exe_info(exe)
             else:
                 reason = 'Cant find TESV.exe'
-                logging.info(reason)
+                logging.debug('\t' + reason)
                 return False, reason
         elif game == 'Oblivion':
             exe = os.path.join(game_dir, u'Oblivion.exe')
@@ -217,11 +227,11 @@ def check_valid_exe(game, game_dir):
                 return exe_info(exe)
             else:
                 reason = 'Cant find Oblivion.exe'
-                logging.info(reason)
+                logging.debug('\t' + reason)
                 return False, reason
     else:
         reason = 'Cant find %s installation.' % game
-        logging.info(reason)
+        logging.debug('\t' + reason)
         return False, reason
 
 

@@ -15,11 +15,11 @@ import random, struct
 import zipfile
 from Crypto.Cipher import AES
 import py7zlib
+from config import Config
 
 __author__ = 'Alexey "Averrin" Nabrodov'
 __version__ = '0.0.3'
 
-from config import Config
 import rarfile
 import yaml
 
@@ -376,10 +376,13 @@ class Installer(QObject):
             self.components_list.itemChanged.connect(self.completeChanged.emit)
             self.components_list.itemClicked.connect(self.completeChanged.emit)
 
-        def initializePage(self):
+        def initializePage(self):         #TODO: make separate uninstallers
             self.components = []
             self.components_list.clear()
-            schema = Config(open('config/uninstall.yml'))
+            if os.path.isfile('config/uninstall.yml'):
+                schema = Config(open('config/uninstall.yml'))
+            else:
+                schema = {}
             for component_name in schema.keys():
                 component = Component.create(component_name, None, schema[component_name])
                 if component is not None:
@@ -534,6 +537,13 @@ class Component(object):
     def default_uninstall(self):
         return True
 
+    @property
+    def is_optional(self):
+        if hasattr(self, 'optional'):
+            return self.optional
+        else:
+            return False
+
     def install(self, destination, message=None):
         pass
 
@@ -576,7 +586,7 @@ class Archive(Component):
 
     @property
     def default_install(self):
-        return self.available and self.match
+        return self.available and self.match and not self.is_optional
 
     @property
     def match(self):
@@ -753,7 +763,7 @@ class Encrypted(Component):
 
     @property
     def default_install(self):
-        return self.available and self.match
+        return self.available and self.match and not self.is_optional
 
     def install(self, destination, message=None):
         self.destination = destination
@@ -801,7 +811,7 @@ class Folder(Component):
 
     @property
     def default_install(self):
-        return self.available
+        return self.available and not self.is_optional
 
     @property
     def title(self):
@@ -859,7 +869,7 @@ class SingleFile(Component):
 
     @property
     def default_install(self):
-        return self.available
+        return self.available and not self.is_optional
 
     @property
     def title(self):

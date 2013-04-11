@@ -5,6 +5,7 @@ from PyQt4.QtCore import QThread, pyqtSignal, Qt, pyqtProperty, QUrl
 import urllib2
 from urlparse import urlparse, parse_qs
 import requests
+import logging
 
 from downloader.HTTPDownload import HTTPDownload, Abort
 
@@ -144,6 +145,22 @@ class GDPlugin(Plugin):
                 print(auth)
 
 
+class Worker(QThread):
+    done = pyqtSignal(object)
+    error = pyqtSignal(Exception)
+
+    def __init__(self, job):
+        QThread.__init__(self)
+        self.job = job
+
+    def run(self):
+        try:
+            ret = self.job()
+            self.done.emit(ret)
+        except Exception, e:
+            self.error.emit(e)
+
+
 class Downloader(QThread):
     started = pyqtSignal()
     stopped = pyqtSignal()
@@ -197,6 +214,8 @@ class DMItem(QWidget):
     removed = pyqtSignal(object)
 
     def __init__(self, src, dest, suspended=False):
+
+        logging.info('Init download: from %s to %s' % (src, dest))
 
         QWidget.__init__(self)
 
@@ -363,6 +382,7 @@ class PathPanel(QWidget):
 
 class DM(QWidget):
     def __init__(self, src=''):
+        logging.info('DM init')
         QWidget.__init__(self)
         self.setLayout(QVBoxLayout())
 
@@ -406,6 +426,8 @@ class DM(QWidget):
 
         self.urls = {}
 
+        logging.info('Start suspended downloads')
+
         with open(temp_folder + 'suspended.list') as f:
             _urls = f.read()
             if _urls:
@@ -413,6 +435,8 @@ class DM(QWidget):
                     if l:
                         s, d = l.split(' ')
                         self.add(s, d, False)
+
+        logging.info('Done dm init')
 
     def removeDownload(self, item):
         del self.urls[item]

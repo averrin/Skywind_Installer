@@ -1,6 +1,6 @@
 from distutils.core import setup
 import py2exe
-from resources import ResourceFile
+# from resources import ResourceFile
 
 # UNRAR = open('unrar.exe', 'rb').read()
 # MSVCP90 = open('C:\\Dropbox\\developers\\interpreters\\Python2\\DLLs\\MSVCP90.dll', 'rb').read()
@@ -20,9 +20,9 @@ setup(
         "includes": [
             "sip", "logging", "subprocess", 'json', 'yaml',
             'rarfile', '_winreg', 'win32com', 'Crypto',
-            'PyQt4.QtNetwork', 'requests', 'lxml._elementpath', 'distutils'
+            'PyQt4.QtNetwork', 'requests', 'lxml._elementpath', 'distutils', 'pycurl'
         ],
-        'packages': ['checker', 'config', 'installer', 'resources', 'secret'],
+        'packages': ['checker', 'config', 'installer', 'dm', 'secret', 'pycurl.pyd'],
         'excludes': ['_gtkagg', '_tkagg', 'bsddb', 'curses', 'email', 'pywin.debugger',
                      'pywin.debugger.dbgcon', 'pywin.dialogs', 'tcl',
                      'Tkconstants', 'Tkinter'],
@@ -39,5 +39,5 @@ setup(
         ('config/contrib', ['config/contrib/vcredist_x86_2008.exe', 'config/contrib/vcredist_x86_2005.exe',
                                 'config/contrib/unrar.exe', 'C:\\Dropbox\\developers\\interpreters\\Python2\\DLLs\\MSVCP90.dll'])
     ],
-    zipfile=None,
+    zipfile=None, requires=['requests'],
 )

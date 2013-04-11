@@ -8,47 +8,88 @@ import shutil
 import sys
 import logging
 from PyQt4.QtGui import QWidget, QVBoxLayout, QMainWindow, QIcon, QHBoxLayout, QStatusBar, QSizePolicy, QLabel, QApplication, QPushButton, QPixmap, QFileDialog, QMessageBox, QToolBar, QDockWidget, QStackedWidget, QAction, QToolButton, QTextBrowser
-from PyQt4.QtCore import Qt, pyqtSignal, QSize
+from PyQt4.QtCore import Qt, pyqtSignal, QSize, QThread
 from PyQt4.QtWebKit import QWebView
 from lxml import etree
-from requests import *
 
-# logging.basicConfig(format='[%(asctime)s] %(levelname)s:\t\t%(message)s', filename='skywind.log',
-#                     level=logging.DEBUG,
-#                     datefmt='%d.%m %H:%M:%S')
-from config import Config
+import os
+from bug_report import DebugManager
+from config_manager import ConfigManager
+from dep_manager import DepManager, Internal, External
 from dm import DM
+
+#TODO: debug mode into all processes
 
 __author__ = 'Alexey "Averrin" Nabrodov'
 __version__ = '0.1.0'
 
+DEBUG = '-debug' in sys.argv
+config_folder = 'config'
+icons_folder = os.path.join(config_folder, 'icons') + os.sep
+contrib_folder = os.path.join(config_folder, 'contrib') + os.sep
+temp_folder = os.path.join(config_folder, 'temp') + os.sep
+frozen = getattr(sys, "frozen") if hasattr(sys, 'frozen') else False
+bug_thread = 'http://morroblivion.com/forums/skyrim/skywind-development/4098'
+log_filename = 'transtes.log'
+
+if DEBUG:
+    debug = DebugManager('TransTES', __version__)
+
+dm = DepManager()
+cm = ConfigManager(ignore_optional=True)
+
+cm.addConfig("Skywind", os.path.join(config_folder, 'Skywind.yml'), optional=True)
+cm.addConfig("Skyblivion", os.path.join(config_folder, 'Skyblivion.yml'), optional=True)
+
+dm.addDeps([
+    Internal(config_folder, is_folder=True),
+    Internal(icons_folder, is_folder=True),
+    Internal(contrib_folder, is_folder=True),
+    Internal(temp_folder, is_folder=True),
+    External('unrar.exe', os.path.expandvars('%SYSTEMROOT%\\unrar.exe'), contrib_folder=contrib_folder),
+    External('7z.exe', os.path.expandvars('%SYSTEMROOT%\\7z.exe'), contrib_folder=contrib_folder),
+    External('7z.dll', os.path.expandvars('%SYSTEMROOT%\\7z.dll'), contrib_folder=contrib_folder),
+    cm
+])
+
+if not dm.ok and dm.critical:
+    qtapp = QApplication(sys.argv)
+
+    dm_info = QTextBrowser()
+    dm_info.append(u'<h3>Installer seems corrupted:</h3>')
+    for d in dm.critical:
+        dm_info.append(d.info)
+    dm_info.show()
+    qtapp.exec_()
+    sys.exit(0)
+
 from checker import *
 from installer import Installer, Encrypted
 from esm_reader import ESMFile, CryptedESMFile
+from requests import get
 
-DEBUG = False
 
-if hasattr(sys, "frozen") and getattr(sys, "frozen") == "windows_exe":
-    print('Compiled version')
-else:
-    print('From sources')
+class Worker(QThread):
+    done = pyqtSignal(object)
+    error = pyqtSignal(Exception)
 
-unrar = os.path.join(os.environ['SYSTEMROOT'], 'unrar.exe')
-if not os.path.isfile(unrar):
-    shutil.copy(os.path.abspath('config/contrib/unrar.exe'), unrar)
+    def __init__(self, job):
+        QThread.__init__(self)
+        self.job = job
 
-sz = os.path.join(os.environ['SYSTEMROOT'], '7z.exe')
-if not os.path.isfile(sz):
-    shutil.copy('config/contrib/7z.exe', sz)
-    shutil.copy('config/contrib/7z.dll', os.path.join(os.environ['SYSTEMROOT'], '7z.dll'))
-
-icons_folder = 'config/icons/'
+    def run(self):
+        try:
+            ret = self.job()
+            self.done.emit(ret)
+        except Exception, e:
+            self.error.emit(e)
 
 
 class GameInfoPanel(QWidget):
     updated = pyqtSignal()
 
     def __init__(self, game, force_browse=False):
+        logging.info('Init %s info panel' % game)
         self.game = game
         self.is_steam = check_steam(self.game)
         self.path = get_path(self.game, self.is_steam)
@@ -145,8 +186,30 @@ class GameInfoPanel(QWidget):
 
 class ModInfoPanel(QWidget):
     updated = pyqtSignal()
+    gists = {'Skywind': '5338904', 'Skyblivion': '5338932'}
+
+    def getRemoteConfig(self):
+        api_url = 'https://api.github.com/gists/'
+        url = get(api_url + self.gists[self.name]).json()[u'files'][u'%s.yml' % self.name][u'raw_url']
+        cm.addRemoteConfig("%s_remote" % self.name, url)
+
+    def checkUpdates(self):
+        logging.info('Checking %s updates' % self.name)
+        if "%s_remote" not in cm.configs:
+            self.getRemoteConfig()
+        remote = cm["%s_remote" % self.name]
+        local = cm[self.name]
+
+        if local._dict != remote._dict:
+            print('Seems like update for %s' % self.name)
+            cm.configs[self.name] = cm["%s_remote" % self.name]
+            self.schema = cm[self.name]
+        else:
+            print('%s is latest version' % self.name)
+
 
     def __init__(self, name, parent_game, child_game):
+        logging.info('Init %s info panel' % name)
         self.name = name
         self.child = child_game
         self.parent = parent_game
@@ -162,7 +225,7 @@ class ModInfoPanel(QWidget):
         self.install = QPushButton(u'Install')
         self.uninstall = QPushButton(u'Uninstall')
 
-        self.schema = Config(open('config/%s.yml' % self.name))
+        self.schema = cm[self.name]
 
         self.installer = Installer(self, self.schema, self.install)
         self.uninstall.clicked.connect(self.installer.uninstall)
@@ -226,6 +289,9 @@ class ModInfoPanel(QWidget):
         sub_panel.layout().setMargin(0)
         self.layout().setMargin(0)
 
+        if self.is_valid:
+            self.checkUpdates()
+
     def setVersion(self):
         if self.is_valid:
             self.esm = ESMFile(os.path.join(self.install_path, u'Data', u'%s.esm' % self.name))
@@ -272,7 +338,6 @@ class ModInfoPanel(QWidget):
             self.install.clicked.connect(self.installer.install)
             self.uninstall.setVisible(True)
 
-
         if self.child.is_valid():
             self.install.setEnabled(True)
         else:
@@ -292,6 +357,8 @@ class Browser(QWidget):
 
         self.config = False
 
+        logging.info('Get readme')
+
         if os.path.isfile('config/Skywind.yml'):
             self.view.setHtml(self.getReadme('Skywind'))
             button = QToolButton()
@@ -307,8 +374,10 @@ class Browser(QWidget):
             button.clicked.connect(lambda: self.view.setHtml(self.getReadme('Skyblivion')))
             self.toolbar.addWidget(button)
 
+        logging.info('Done with readme')
+
     def getReadme(self, game):
-        self.config = Config(open('config/%s.yml' % game))
+        self.config = cm[game]
         page = get(self.config.readme.url)
         if page.status_code == 200:
             tree = etree.HTML(page.content)
@@ -340,13 +409,18 @@ class Browser(QWidget):
 class SBAction(QAction):
     def __init__(self, sideBarDock, *args, **kwargs):
         self.sideBarDock = sideBarDock
+        sideBarDock.hide()
         QAction.__init__(self, *args, **kwargs)
 
     def showWidget(self):
         if self.sideBarDock.isHidden():
+            if hasattr(self.widget, 'onShow'):
+                self.widget.onShow()
             self.sideBarDock.show()
         elif self.sideBarDock.stack.currentWidget() == self.widget:
             self.sideBarDock.hide()
+            if hasattr(self.widget, 'onHide'):
+                self.widget.onHide()
         if hasattr(self, 'widgetWidth'):
             self.sideBarDock.setFixedWidth(self.widgetWidth)
         else:
@@ -355,15 +429,13 @@ class SBAction(QAction):
         self.sideBarDock.stack.setCurrentWidget(self.widget)
         self.sideBarDock.setTitleBarWidget(self.titleWidget)
         self.widget.setFocus()
-        if hasattr(self.widget, 'onShow'):
-            self.widget.onShow()
 
     def forceShowWidget(self):
+        if hasattr(self.widget, 'onShow'):
+            self.widget.onShow()
         self.sideBarDock.show()
         self.sideBarDock.stack.setCurrentWidget(self.widget)
         self.widget.setFocus()
-        if hasattr(self.widget, 'onShow'):
-            self.widget.onShow()
 
 
 class SideBar(QToolBar):
@@ -389,6 +461,7 @@ class SideBar(QToolBar):
 
 class UI(QMainWindow):
     def __init__(self):
+        logging.info('Start main UI init')
         QMainWindow.__init__(self)
         self.setWindowTitle(u"TransTES Hub" if not DEBUG else 'TransTES [DEBUG]')
         self.setWindowIcon(QIcon('icons/app.png'))
@@ -403,8 +476,8 @@ class UI(QMainWindow):
 
         games_panel.resize(500, 100)
 
-        is_skywind = os.path.isfile('config/Skywind.yml')
-        is_skyblivion = os.path.isfile('config/Skyblivion.yml')
+        is_skywind = "Skywind" in cm.configs
+        is_skyblivion = "Skyblivion" in cm.configs
 
         self.Skyrim = GameInfoPanel('Skyrim', force_browse=True)
 
@@ -417,6 +490,9 @@ class UI(QMainWindow):
             self.Oblivion = GameInfoPanel('Oblivion')
             games_panel.layout().addWidget(self.Oblivion)
             self.Skyblivion = ModInfoPanel('Skyblivion', self.Skyrim, self.Oblivion)
+
+        logging.info('Done games init')
+        logging.info('Start ui building')
 
         games_panel.layout().addWidget(self.Skyrim)
 
@@ -452,10 +528,44 @@ class UI(QMainWindow):
         # self.readme.onShow = lambda: self.setMaximumWidth(games_panel.width())
         readme = self.createSBAction(QIcon(icons_folder + 'readme.png'), 'Readme', self.readme, toolbar=True,
                                      widgetWidth=700, titleWidget=self.readme.toolbar)
-        readme.showWidget()
         self.createSBAction(QIcon(icons_folder + 'dm.png'),
                             'Downloads', self.dm, toolbar=True,
                             titleWidget=self.dm.toolbar)
+
+        if DEBUG:
+            report = QTextBrowser()
+            report.resize(800, 600)
+            prefix = u'Please copy this report text and post it into this thread: <a href="%s">Installer bugs</a><br><br>' % bug_thread
+            from collections import OrderedDict
+
+            extra = OrderedDict({
+                'CWD': os.path.abspath('.'),
+                'SKYRIM PATH': self.Skyrim.path
+            })
+            if is_skywind:
+                extra['MORROWIND_PATH'] = self.Morrowind.path
+                extra['MORROWIND_IV'] = self.Morrowind.is_valid()
+                extra['MORROWIND_EV'] = self.Morrowind.exe_valid
+                extra['MORROWIND_FV'] = self.Morrowind.folder_valid
+                extra['SKYWIND_DISTRIBPATH'] = self.Skywind.distrib_path
+                extra['SKYWIND_INSTALLPATH'] = self.Skywind.install_path
+
+            if is_skyblivion:
+                extra['OBLIVION_PATH'] = self.Oblivion.path
+                extra['OBLIVION_IV'] = self.Oblivion.is_valid()
+                extra['OBLIVION_EV'] = self.Oblivion.exe_valid
+                extra['OBLIVION_FV'] = self.Oblivion.folder_valid
+                extra['SKYBLIVION_DISTRIBPATH'] = self.Skyblivion.distrib_path
+                extra['SKYBLIVION_INSTALLPATH'] = self.Skyblivion.install_path
+
+            report.onShow = lambda: report.setHtml(debug.getReport(prefix=prefix, extra=extra))
+
+            self.createSBAction(QIcon(icons_folder + 'bug.png'),
+                                'Bug Report', report, toolbar=True)
+        else:
+            readme.showWidget()
+
+        logging.info('Done ui building')
 
     def createSBAction(self, icon, name, widget, keyseq='', toolbar=False, titleWidget=None, widgetWidth=None):
         action = SBAction(self.sideBar.dock, icon, name, self)
@@ -492,12 +602,12 @@ if __name__ == '__main__':
             fp = sys.argv[2]
             with open(fp, 'rb') as f:
                 hash = hashlib.sha256(f.read()).hexdigest()
-                msgBox = QTextBrowser()
-                msgBox.setText(u'Hash sum calculated\nhash: %s' % hash)
-                msgBox.resize(500, 100)
-                msgBox.show()
-                qtapp.exec_()
-                sys.exit(0)
+            msgBox = QTextBrowser()
+            msgBox.setText(u'Hash sum calculated\nhash: %s' % hash)
+            msgBox.resize(500, 100)
+            msgBox.show()
+            qtapp.exec_()
+            sys.exit(0)
         elif sys.argv[1] == '--encrypt' and len(sys.argv) > 3:
             e = Encrypted('new', '', {})
             from secret import key
@@ -513,5 +623,6 @@ if __name__ == '__main__':
             msgBox.resize(500, 100)
             msgBox.show()
             qtapp.exec_()
+
             sys.exit(0)
     main()
