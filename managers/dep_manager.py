@@ -4,9 +4,7 @@
 from __future__ import print_function
 import os
 import shutil
-
 import logging
-import sys
 
 
 class DepManager(object):

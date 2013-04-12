@@ -4,11 +4,13 @@
 from __future__ import print_function
 import tempfile
 import requests
-from config import Config
+from utils.config import Config
 import logging
 
 
-class ConfigManager(object):          #TODO: add remote update config feature
+class ConfigManager(object):
+    #TODO: add remote update config feature
+
     optional = False
     configs = {}
     invalid = []
@@ -26,12 +28,12 @@ class ConfigManager(object):          #TODO: add remote update config feature
             f.write(cfg)
         self.addConfig(name, f.name, optional)
 
-    def addConfig(self, name, filepath, optional=False):
+    def addConfig(self, name, file_path, optional=False):
         try:
-            self.configs[name] = Config(open(filepath))
+            self.configs[name] = Config(open(file_path))
         except Exception as e:
             logging.debug('Cant add config: %s (%s)' % (name, e))
-            self.invalid.append((filepath, optional))
+            self.invalid.append((file_path, optional))
 
     @property
     def critical(self):
@@ -39,7 +41,13 @@ class ConfigManager(object):          #TODO: add remote update config feature
 
     def check(self):
         if self.invalid:
-            return False or self.ignore_optional
+            if self.ignore_optional:
+                if self.critical:
+                    return False
+                else:
+                    return True
+            else:
+                return False
         else:
             return True
 

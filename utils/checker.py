@@ -14,7 +14,6 @@ except ImportError:
 import platform
 import hashlib
 from win32com.client import Dispatch
-import logging
 
 arch = platform.machine()
 
@@ -28,12 +27,11 @@ if arch == 'AMD64':
 else:
     wow = ''
 
-app_path = 'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\morrowind.exe'
+
 path = {
     'Morrowind': 'HKEY_LOCAL_MACHINE\\SOFTWARE\\%sBethesda Softworks\\Morrowind',
     'Skyrim': 'HKEY_LOCAL_MACHINE\\SOFTWARE\\%sBethesda Softworks\\Skyrim',
     'Oblivion': 'HKEY_LOCAL_MACHINE\\SOFTWARE\\%sBethesda Softworks\\Oblivion'}
-uninstall_steam = 'HKEY_LOCAL_MACHINE\\SOFTWARE\\%%sMicrosoft\\Windows\\CurrentVersion\\Uninstall\\Steam App %s' % STEAM_ID
 steam_path = 'HKEY_CURRENT_USER\\Software\\Valve\\Steam'
 steam_postfix = '\\Apps\\%s'
 data_folder = {'Morrowind': u'Data Files', 'Skyrim': u'Data', 'Oblivion': u'Data'}
@@ -65,14 +63,20 @@ versions = {
     },
 }
 
-blacklist = {'a0dfd7343dc40d8c61da6178912ff1988086f9d32695fe44dc3522662d90e2ce': {'version': '1.6.0.1820',
-                                                                                  'desc': 'http://xtes.ru/index.php?name=downloads&op=full&file=7'},
-             '2899d97d6430d68d08bb28cde663c82962c273e0991541f067074b8d399945f7': {'version': '1.6.0.1820',
-                                                                                  'desc': 'http://nodvd.net/912-the-elder-scrolls-iii-morrowind-v16-ru-nodvd.html'}}
+blacklist = {
+    'a0dfd7343dc40d8c61da6178912ff1988086f9d32695fe44dc3522662d90e2ce': {
+        'version': '1.6.0.1820',
+        'desc': 'http://xtes.ru/index.php?name=downloads&op=full&file=7'
+    },
+    '2899d97d6430d68d08bb28cde663c82962c273e0991541f067074b8d399945f7': {
+        'version': '1.6.0.1820',
+        'desc': 'http://nodvd.net/912-the-elder-scrolls-iii-morrowind-v16-ru-nodvd.html'
+    }
+}
 
 for p in path:
-    path[p] = path[p] % wow
-# uninstall = uninstall_steam % wow
+    path[p] %= wow
+
 
 def check_steam(game):
     logging.info('Checking steam for %s' % game)
@@ -82,7 +86,8 @@ def check_steam(game):
             return True
         else:
             return False
-    except:
+    except Exception as e:
+        logging.error(e)
         return False
 
 
@@ -126,13 +131,13 @@ def exe_info(path):
 
     ver_parser = Dispatch('Scripting.FileSystemObject')
     version = ver_parser.GetFileVersion(path)
-    hash = m.hexdigest()
+    hash_sum = m.hexdigest()
 
-    if hash in blacklist:
+    if hash_sum in blacklist:
         reason = 'Morrowind.exe was cracked'
         return False, reason
     else:
-        info = (hash, version, versions[hash]['desc'] if hash in versions else 'Unknown exe')
+        info = (hash_sum, version, versions[hash_sum]['desc'] if hash_sum in versions else 'Unknown exe')
         logging.debug('\t %s' % str(info))
         return info, None
 
@@ -241,27 +246,7 @@ def main():
 
 
 def _main():
-    logging.info('Start')
-    is_steam = check_steam('Morrowind')
-    if is_steam:
-        logging.info('Steam version detected')
-        print('Steam version detected')
-        morrowind_version = 'Steam'
-    else:
-        morrowind_version = 'Retail'
-
-    try:
-        morrowind_dir = get_path('Morrowind', morrowind_version)
-        is_valid = check_valid_exe(morrowind_dir)
-        if is_valid:
-            logging.info('Morrowind version: %s [%s]' % is_valid[1:])
-            print('Morrowind version: %s [%s]' % is_valid[1:])
-        else:
-            logging.info('Unknown Morrowind.exe file')
-            print('Unknown Morrowind.exe file')
-    except:
-        logging.info('No Morrowind detected')
-        print('No Morrowind detected')
+    pass
 
 
 if __name__ == '__main__':

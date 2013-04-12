@@ -39,5 +39,5 @@ setup(
         ('config/contrib', ['config/contrib/vcredist_x86_2008.exe', 'config/contrib/vcredist_x86_2005.exe',
                                 'config/contrib/unrar.exe', 'C:\\Dropbox\\developers\\interpreters\\Python2\\DLLs\\MSVCP90.dll'])
     ],
-    zipfile=None, requires=['requests'],
+    zipfile=None, requires=['requests', 'lxml'],
 )

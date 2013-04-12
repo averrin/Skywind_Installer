@@ -1,19 +1,26 @@
-import sys
-from time import sleep
-from PyQt4.QtGui import QApplication, QWidget, QVBoxLayout, QLineEdit, QLabel, QProgressBar, QHBoxLayout, QPushButton, QToolBar, QDialog, QGridLayout, QMessageBox, QFileDialog, QFormLayout, QToolButton, QIcon
-from PyQt4.QtCore import QThread, pyqtSignal, Qt, pyqtProperty, QUrl
-import urllib2
-from urlparse import urlparse, parse_qs
-import requests
-import logging
-
-from downloader.HTTPDownload import HTTPDownload, Abort
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 """
     http://download.thinkbroadband.com/200MB.zip
-    
     https://docs.google.com/file/d/0B8F9egY3lyGdUUhtZnVydmJIVjQ/edit
 """
+
+from __future__ import print_function
+
+import sys
+from time import sleep
+from PyQt4 import QtCore, QtGui, QtWebKit
+from urlparse import urlparse, parse_qs
+from PyQt4.QtCore import Qt
+import requests
+import logging
+from oauth2client.client import OAuth2WebServerFlow
+from oauth2client.file import Storage
+import httplib2
+from utils.async import background_job
+
+from downloader.HTTPDownload import HTTPDownload, Abort
 
 import os
 
@@ -25,6 +32,8 @@ if not os.path.isfile(temp_folder + 'suspended.list'):
     with open(temp_folder + 'suspended.list', 'w') as f:
         f.write('')
 
+storage = Storage(os.path.join(temp_folder, 'creds'))
+
 
 class Plugin(object):
     def processURL(self, url, dest):
@@ -33,7 +42,9 @@ class Plugin(object):
 
 GD_API_ID = '836414335615.apps.googleusercontent.com'
 GD_API_SECRET = 'G45aJ_akqQT-EPSw9AEeFQT8'
+GD_SCOPE = 'https://www.googleapis.com/auth/drive.readonly'
 GD_API_CALLBACK = 'urn:ietf:wg:oauth:2.0:oob'
+# GD_API_CALLBACK = 'http://localhost:8000'
 
 
 class GDPlugin(Plugin):
@@ -42,22 +53,31 @@ class GDPlugin(Plugin):
 
         self.url = url
         self.dest = dest
+        self.code = False
 
         if url.startswith('https://docs.google'):
 
-            self.auth_url = 'https://accounts.google.com/o/oauth2/auth?scope=https://www.googleapis.com/auth/drive&response_type=code&redirect_uri=%s&client_id=%s' % (
-                GD_API_CALLBACK, GD_API_ID
-            )
+            if not storage.get():
+                flow = OAuth2WebServerFlow(GD_API_ID, GD_API_SECRET, GD_SCOPE, redirect_uri=GD_API_CALLBACK)
+                authorize_url = flow.step1_get_authorize_url()
+                win = QtWebKit.QWebView()
+                win.titleChanged.connect(self.getKey)
+                win.show()
+                win.load(QtCore.QUrl.fromEncoded(authorize_url))
+                
+                while not self.code:
+                    sleep(0.5)
 
-            if os.path.isfile(temp_folder + 'key'):
-                return self._process(url, dest)
+                creds = flow.step2_exchange(self.code)
             else:
-                self.showAuthDialog()
+                creds = storage.get()
+
+            http = httplib2.Http()
+            http = creds.authorize(http)
 
         return url, dest, None, 0
 
-
-    def _process(self, url, dest):
+    def _process(self, url, destination):
         headers = None
         size = 0
         with open('config/temp/key', 'r') as f:
@@ -77,19 +97,19 @@ class GDPlugin(Plugin):
 
             try:
                 url = r['downloadUrl'] + '&access_token=' + token
-                dest = os.path.join('.', r['originalFilename'])
+                destination = os.path.join('.', r['originalFilename'])
                 size = int(r['fileSize'])
             except KeyError:
                 print(r)
                 self.renewToken()
-                return self._process(url, dest)
+                return self._process(url, destination)
 
-            fn = os.path.basename(dest)
+            fn = os.path.basename(destination)
             if os.path.isfile(temp_folder + fn + '.chunk0'):
                 arrived = os.path.getsize(temp_folder + fn + '.chunk0')
                 headers = ['Range: bytes=%s-%s' % (arrived, size)]
 
-        return url, dest, headers, size
+        return url, destination, headers, size
 
     def renewToken(self):
         with open('config/temp/key', 'r') as f:
@@ -111,12 +131,10 @@ class GDPlugin(Plugin):
             f.write('#'.join(auth))
 
     def showAuthDialog(self):
-        from PyQt4.QtWebKit import QWebView
-
-        win = QWebView()
+        win = QtWebKit.QWebView()
         win.titleChanged.connect(self.getKey)
         win.show()
-        win.load(QUrl(self.auth_url))
+        win.load(QtCore.QUrl(self.auth_url))
 
     def getKey(self, title):
         title = str(title.toUtf8())
@@ -145,43 +163,28 @@ class GDPlugin(Plugin):
                 print(auth)
 
 
-class Worker(QThread):
-    done = pyqtSignal(object)
-    error = pyqtSignal(Exception)
+class Downloader(QtCore.QThread):
+    started = QtCore.pyqtSignal()
+    stopped = QtCore.pyqtSignal()
+    flush = QtCore.pyqtSignal()
+    finished = QtCore.pyqtSignal()
+    error = QtCore.pyqtSignal(Exception)
+    progress = QtCore.pyqtSignal(int, int, int, int)
 
-    def __init__(self, job):
-        QThread.__init__(self)
-        self.job = job
-
-    def run(self):
-        try:
-            ret = self.job()
-            self.done.emit(ret)
-        except Exception, e:
-            self.error.emit(e)
-
-
-class Downloader(QThread):
-    started = pyqtSignal()
-    stopped = pyqtSignal()
-    flush = pyqtSignal()
-    finished = pyqtSignal()
-    error = pyqtSignal(Exception)
-    progress = pyqtSignal(int, int, int, int)
-
-    def __init__(self, src, dest, suspended=False):
+    def __init__(self, src, destination, suspended=False):
         self.src = src
-        self.dest = dest
+        self.destination = destination
+        self.suspended = suspended
         self.suspended = False
-        QThread.__init__(self)
+        QtCore.QThread.__init__(self)
 
         # try:
 
         self.gd = GDPlugin()
 
-        self.real_src, self.dest, headers, size = self.gd.processURL(self.src, self.dest)
+        self.real_src, self.destination, headers, size = self.gd.processURL(self.src, self.destination)
 
-        self.dwnld = HTTPDownload(
+        self.downloader = HTTPDownload(
             self.real_src, self.dest,
             callback=self.progress.emit,
             bf_callback=self.flush.emit,
@@ -193,13 +196,12 @@ class Downloader(QThread):
 
         # except Exception, e:
         #     raise e
-            # self.info.setText('<b style="color: red">%s</b>' % e)
-
+        # self.info.setText('<b style="color: red">%s</b>' % e)
 
     def run(self):
         self.started.emit()
         try:
-            self.dwnld.download(chunks=3, resume=True)
+            self.downloader.download(chunks=3, resume=True)
             self.finished.emit()
         except Exception, e:
             if not isinstance(e, Abort):
@@ -210,14 +212,14 @@ class Downloader(QThread):
                 self.error.emit(e)
 
 
-class DMItem(QWidget):
-    removed = pyqtSignal(object)
+class DMItem(QtGui.QWidget):
+    removed = QtCore.pyqtSignal(object)
 
     def __init__(self, src, dest, suspended=False):
 
         logging.info('Init download: from %s to %s' % (src, dest))
 
-        QWidget.__init__(self)
+        QtGui.QWidget.__init__(self)
 
         self.src = src
         self.dest = dest
@@ -225,19 +227,19 @@ class DMItem(QWidget):
 
         self.initDownloader()
 
-        self.setLayout(QVBoxLayout())
-        self.layout().addWidget(QLabel('<b>Downloading:</b> %s' % os.path.split(self.dest)[-1]))
+        self.setLayout(QtGui.QVBoxLayout())
+        self.layout().addWidget(QtGui.QLabel('<b>Downloading:</b> %s' % os.path.split(self.dest)[-1]))
 
-        self.controls = QWidget()
-        self.controls.setLayout(QHBoxLayout())
+        self.controls = QtGui.QWidget()
+        self.controls.setLayout(QtGui.QHBoxLayout())
 
-        self.progressBar = QProgressBar()
-        self.toggle = QToolButton()
-        self.toggle.setIcon(QIcon('config/icons/pause.png'))
+        self.progressBar = QtGui.QProgressBar()
+        self.toggle = QtGui.QToolButton()
+        self.toggle.setIcon(QtGui.QIcon('config/icons/pause.png'))
         self.toggle.clicked.connect(self.toggleDownloading)
 
-        self.remove_button = QToolButton()
-        self.remove_button.setIcon(QIcon('config/icons/remove.png'))
+        self.remove_button = QtGui.QToolButton()
+        self.remove_button.setIcon(QtGui.QIcon('config/icons/remove.png'))
         self.remove_button.clicked.connect(self.remove)
 
         self.controls.layout().addWidget(self.progressBar)
@@ -246,7 +248,7 @@ class DMItem(QWidget):
 
         self.layout().addWidget(self.controls)
         self.progressBar.setMaximum(100)
-        self.info = QLabel('')
+        self.info = QtGui.QLabel('')
         self.layout().addWidget(self.info)
 
         self.running = False
@@ -264,13 +266,15 @@ class DMItem(QWidget):
 
     def stopped(self):
         self.info.setText('<b>Paused:</b> %s/%s [%s%%].' % (
-            self.sizeof_fmt(self.d.dwnld.arrived), self.sizeof_fmt(self.d.dwnld.size), self.d.dwnld.percent)
+            self.sizeof_fmt(self.d.downloader.arrived),
+            self.sizeof_fmt(self.d.downloader.size),
+            self.d.downloader.percent)
         )
 
     def toggleDownloading(self):
         if self.running:
-            if not self.d.dwnld.abort:
-                self.d.dwnld.abort = True
+            if not self.d.downloader.abort:
+                self.d.downloader.abort = True
             else:
                 self.initDownloader()
                 self.start()
@@ -278,7 +282,7 @@ class DMItem(QWidget):
             self.start()
 
         # self.toggle.setText('Start' if self.d.dwnld.abort else 'Pause')
-        self.toggle.setIcon(QIcon('config/icons/%s.png' % ('start' if self.d.dwnld.abort else 'pause')))
+        self.toggle.setIcon(QtGui.QIcon('config/icons/%s.png' % ('start' if self.d.downloader.abort else 'pause')))
 
     def error(self, e):
         if e and e is not None and not isinstance(e, Abort):
@@ -288,7 +292,7 @@ class DMItem(QWidget):
                     code, e = e
 
                     if code == 28:
-                        self.d.dwnld.abort = True
+                        self.d.downloader.abort = True
                         sleep(1)
                         self.toggleDownloading()
                         self.initDownloader()
@@ -312,7 +316,7 @@ class DMItem(QWidget):
         self.running = False
 
     def remove(self):
-        self.d.dwnld.abort = True
+        self.d.downloader.abort = True
         self.setVisible(False)
         self.running = False
         self.removed.emit(self)
@@ -335,26 +339,26 @@ class DMItem(QWidget):
             self.sizeof_fmt(arrived), self.sizeof_fmt(total), percent, self.sizeof_fmt(speed))
         )
 
-        if self.d.dwnld.suspended:
+        if self.d.downloader.suspended:
             self.suspended = False
             self.running = False
             self.initDownloader()
 
 
-class PathPanel(QWidget):
-    updated = pyqtSignal()
+class PathPanel(QtGui.QWidget):
+    updated = QtCore.pyqtSignal()
 
     def __init__(self, default='', button_title='...', select_dir=True):
-        QWidget.__init__(self)
+        QtGui.QWidget.__init__(self)
 
         self.select_dir = select_dir
 
-        self.path_input = QLineEdit(default)
-        self.browse_button = QPushButton(button_title)
+        self.path_input = QtGui.QLineEdit(default)
+        self.browse_button = QtGui.QPushButton(button_title)
 
         self.browse_button.clicked.connect(self.browse)
 
-        self.setLayout(QHBoxLayout())
+        self.setLayout(QtGui.QHBoxLayout())
         self.layout().addWidget(self.path_input)
         self.layout().addWidget(self.browse_button)
 
@@ -362,9 +366,9 @@ class PathPanel(QWidget):
 
     def browse(self):
         if self.select_dir:
-            path = QFileDialog.getExistingDirectory(self, u'Choose folder', '')
+            path = QtGui.QFileDialog.getExistingDirectory(self, u'Choose folder', '')
         else:
-            path = QFileDialog.getSaveFileName(self, u'Save as', '')
+            path = QtGui.QFileDialog.getSaveFileName(self, u'Save as', '')
         if path:
             self.setPath(path)
 
@@ -372,27 +376,36 @@ class PathPanel(QWidget):
         if (self.select_dir and os.path.isdir(path)) or not self.select_dir:
             self.path_input.setText(path)
         else:
-            QMessageBox.warning(self, u'Error', u'Incorrect path')
+            QtGui.QMessageBox.warning(self, u'Error', u'Incorrect path')
         self.updated.emit()
 
-    @pyqtProperty(str)
+    @QtCore.pyqtProperty(str)
     def getPath(self):
         return str(self.path_input.text())
 
 
-class DM(QWidget):
+class DM(QtGui.QWidget):
+    added = QtCore.pyqtSignal(object)
+    
+    
+    def showWeb(self, url, handler):
+        win = QtWebKit.QWebView()
+        win.titleChanged.connect(handler)
+        win.show()
+        win.load(QtCore.QUrl.fromEncoded(url))
+    
     def __init__(self, src=''):
         logging.info('DM init')
-        QWidget.__init__(self)
-        self.setLayout(QVBoxLayout())
+        QtGui.QWidget.__init__(self)
+        self.setLayout(QtGui.QVBoxLayout())
 
-        self.toolbar = QToolBar()
+        self.toolbar = QtGui.QToolBar()
 
-        self.ad = QToolButton()
-        self.ad.setIcon(QIcon('config/icons/add.png'))
+        self.ad = QtGui.QToolButton()
+        self.ad.setIcon(QtGui.QIcon('config/icons/add.png'))
         self.ad.clicked.connect(self.addDownload)
         self.toolbar.addWidget(self.ad)
-        self.ta = QPushButton('Toggle all')
+        self.ta = QtGui.QPushButton('Toggle all')
         self.ta.clicked.connect(self.toggle_all)
         self.toolbar.addWidget(self.ta)
 
@@ -402,21 +415,21 @@ class DM(QWidget):
 
         self.items = []
 
-        self.dialog = QDialog()
-        self.dialog.setLayout(QFormLayout())
-        self.dialog.url = QLineEdit()
+        self.dialog = QtGui.QDialog()
+        self.dialog.setLayout(QtGui.QFormLayout())
+        self.dialog.url = QtGui.QLineEdit()
         self.dialog.url.setPlaceholderText('http://')
         self.dialog.dest = PathPanel(default=src)
         self.dialog.layout().addRow('URL', self.dialog.url)
         self.dialog.layout().addRow('Save to', self.dialog.dest)
 
-        self.dialog.ab = QPushButton('Add')
+        self.dialog.ab = QtGui.QPushButton('Add')
         self.dialog.ab.clicked.connect(lambda: self.add(self.dialog.url.text(), self.dialog.dest.getPath, False))
-        self.dialog.c = QPushButton('Cancel')
+        self.dialog.c = QtGui.QPushButton('Cancel')
         self.dialog.c.clicked.connect(self.dialog.close)
 
-        self.dialog.controls = QWidget()
-        self.dialog.controls.setLayout(QHBoxLayout())
+        self.dialog.controls = QtGui.QWidget()
+        self.dialog.controls.setLayout(QtGui.QHBoxLayout())
         self.dialog.controls.layout().addWidget(self.dialog.ab)
         self.dialog.controls.layout().addWidget(self.dialog.c)
 
@@ -427,6 +440,8 @@ class DM(QWidget):
         self.urls = {}
 
         logging.info('Start suspended downloads')
+        
+        self.added.connect(self.addItem)
 
         with open(temp_folder + 'suspended.list') as f:
             _urls = f.read()
@@ -448,12 +463,15 @@ class DM(QWidget):
             for p in self.urls.values():
                 _urls += '%s %s\n' % p
             f.write(_urls)
+            
+    def addItem(self, item):
+        self.layout().addWidget(item)
 
+    @background_job('added', error_callback=lambda x: print(x))
     def add(self, src, dest, autostart=True):
         item = DMItem(str(src), str(dest), not autostart)
         item.removed.connect(self.removeDownload)
         self.items.append(item)
-        self.layout().addWidget(item)
 
         self.dialog.close()
         self.urls[item] = (src, dest)
@@ -463,7 +481,7 @@ class DM(QWidget):
         if autostart:
             item.start()
         else:
-            item.toggle.setIcon(QIcon('config/icons/start.png'))
+            item.toggle.setIcon(QtGui.QIcon('config/icons/start.png'))
             item.start()
 
         return item
@@ -477,16 +495,14 @@ class DM(QWidget):
 
 
 def main():
-    qtapp = QApplication(sys.argv)
+    qt_app = QtGui.QApplication(sys.argv)
     import os
 
     win = DM(os.path.abspath('.'))
     win.layout().addWidget(win.toolbar)
     win.show()
 
-    url = "http://download.thinkbroadband.com/50MB.zip"
-
-    qtapp.exec_()
+    qt_app.exec_()
 
     for item in win.items:
         if item.done:

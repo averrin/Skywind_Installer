@@ -9,7 +9,7 @@ import logging
 
 
 class DebugManager(object):
-    def __init__(self, title, version, max_logsize=1024*10):
+    def __init__(self, title, version, max_logsize=1024 * 10):
         self.title = title
         self.log_filename = '%s.log' % title
         self.version = version
@@ -22,7 +22,9 @@ class DebugManager(object):
                             datefmt='%d.%m %H:%M:%S')
         logging.info('===============\n')
 
-    def getReport(self, prefix=u'', affix=u'', extra={}):
+    def getReport(self, prefix=u'', affix=u'', extra=None):
+        if not extra:
+            extra = {}
         report = prefix
         report += u'==================START REPORT==================<br><br>'
         report += u'TITLE: %s<br>' % self.title
