@@ -1,21 +1,19 @@
-version: 'v056'
-readme:
-  url: http://morroblivion.com/forums/skyrim/skyblivion-mod-releases/4122
-  xpath: '//*[@id="node-4122"]/div[2]/div[2]/div'
-  style: 'dark' 
-components:
-  "Skywind":
-    type: folder
-    dest: 'Data'
-  "Skywind.zip":
-    type: archive
-    dest: 'Data'
-    hash: false
-  "Skywind.cmf":
-    type: encrypted
-    dest: Data/Skywind.esm
-    hash: fef3ea521151af9adfe5c4f777c082b8a40ea8a59465eea0442740983015194f
-    original_hash: 456a88fd382952e66f8f731a9ea8d6f40d2161adf1e2ba6947cd2b7de944234c
-  "Skywind.bsa":
-    type: file
-    dest: 'Data/Skywind.bsa'
+readme: !mapping
+    style: !!python/unicode 'dark'
+    url: !!python/unicode 'http://morroblivion.com/forums/skyrim/skyblivion-mod-releases/4122'
+    xpath: !!python/unicode '//*[@id="node-4122"]/div[2]/div[2]/div'
+versions: !mapping
+    0.6.0: !mapping
+        components: !mapping
+            test.7z: !mapping
+                dest: !!python/unicode 'Data'
+                hash: false
+                optional: true
+                type: !!python/unicode 'archive'
+    0.6.1: !mapping
+        components: !mapping
+            test.7z: !mapping
+                dest: !!python/unicode 'Data'
+                hash: false
+                optional: true
+                type: !!python/unicode 'archive'

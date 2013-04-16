@@ -64,7 +64,7 @@ class GDPlugin(Plugin):
                 win.titleChanged.connect(self.getKey)
                 win.show()
                 win.load(QtCore.QUrl.fromEncoded(authorize_url))
-                
+
                 while not self.code:
                     sleep(0.5)
 
@@ -185,7 +185,7 @@ class Downloader(QtCore.QThread):
         self.real_src, self.destination, headers, size = self.gd.processURL(self.src, self.destination)
 
         self.downloader = HTTPDownload(
-            self.real_src, self.dest,
+            self.real_src, self.destination,
             callback=self.progress.emit,
             bf_callback=self.flush.emit,
             abort_callback=self.stopped.emit,

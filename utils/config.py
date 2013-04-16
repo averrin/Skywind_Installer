@@ -6,6 +6,7 @@ import json
 import re
 from collections import OrderedDict
 
+
 class Mapping(OrderedDict):
     def __unicode__(self):
         return OrderedDict.__unicode__(self)
@@ -16,16 +17,17 @@ class Mapping(OrderedDict):
         except KeyError:
             attr = super(OrderedDict, self).__getattribute__(key)
         return attr
-#
-#    def __getitem__(self, key):
-#        attr = super().__getitem__(key)
-#        r = Mapping._convert(attr)
-#        if r != attr:
-#            super().__setitem__(key, r)
-#        return r
-#
-#    def __setattr__(self, key, value):
-#        super(OrderedDict, self).__setitem__(key, value)
+
+    #
+    #    def __getitem__(self, key):
+    #        attr = super().__getitem__(key)
+    #        r = Mapping._convert(attr)
+    #        if r != attr:
+    #            super().__setitem__(key, r)
+    #        return r
+    #
+    #    def __setattr__(self, key, value):
+    #        super(OrderedDict, self).__setitem__(key, value)
 
     @classmethod
     def _convert(cls, attr):
@@ -41,7 +43,7 @@ class Mapping(OrderedDict):
             attr = eval(attr)
         elif isinstance(attr, bytes):
             attr = attr.decode('utf8')
-            
+
         if isinstance(attr, str):
             try:
                 if attr.startswith('[') and attr.endswith(']') and type(eval(attr)) == list:
@@ -60,21 +62,33 @@ class Mapping(OrderedDict):
 def mapping_representer(dumper, data):
     return dumper.represent_mapping('!mapping', data)
 
+
 yaml.add_representer(Mapping, mapping_representer)
+
 
 def mapping_constructor(loader, tag, node):
     value = loader.construct_mapping(node)
     m = Mapping(sorted(value.items()))
-#    m.update(value)
+    #    m.update(value)
     return m
+
 
 yaml.add_multi_constructor('!mapping', mapping_constructor)
 
+
 class Config(object):
     def __init__(self, cfg_file):
+        self.filename = cfg_file.name
         cfg = cfg_file.read()
         cfg = yaml.load(cfg)
         self._dict = cfg
+
+    def __setattr__(self, key, value):
+        # if key not in dir(self):
+        if key not in ['filename', '_dict']:
+            self._dict[key] = value
+        else:
+            object.__setattr__(self, key, value)
 
     def __getattr__(self, key):
         try:
@@ -82,11 +96,11 @@ class Config(object):
         except AttributeError:
             attr = self._dict[key]
             if isinstance(attr, dict):
-                    m = Mapping()
-                    m.update(attr)
-                    m._total_convert()
-                    attr = m
-                    self._dict[key] = attr
+                m = Mapping()
+                m.update(attr)
+                m._total_convert()
+                attr = m
+                self._dict[key] = attr
             return attr
 
     def __getitem__(self, key):
@@ -113,9 +127,16 @@ class Config(object):
 
 
 def main():
-    cfg = Config(open('../Apps/Orlangur/config/main.cfg'))
-#    print(cfg.options)
-    cfg.save(open('../Apps/Orlangur/config/main.cfg', 'w'))
+    # cfg = Config(open('../Apps/Orlangur/config/main.cfg'))
+    #    print(cfg.options)
+    # cfg.save(open('../Apps/Orlangur/config/main.cfg', 'w'))
+    cfg = Config(open('../config/config.yml'))
+    print(cfg.first_run)
+    cfg.first_run = False
+    cfg.save(open('../config/config.yml', 'w'))
+    cfg = Config(open('../config/config.yml'))
+    print(cfg.first_run)
+
 
 if __name__ == '__main__':
     main()

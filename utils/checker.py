@@ -86,6 +86,9 @@ def check_steam(game):
             return True
         else:
             return False
+    except OSError as e:
+        logging.warn('Key not found. Error: %s' % e)
+        return False
     except Exception as e:
         logging.error(e)
         return False
@@ -112,7 +115,7 @@ def enum_reg_values(key):
         i = 0
         while 1:
             name, value, reg_type = winreg.EnumValue(key, i)
-            print('\t', repr(name), get_reg_value(key, name))
+            print('  ', repr(name), get_reg_value(key, name))
             i += 1
     except WindowsError:
         pass
@@ -121,7 +124,7 @@ def enum_reg_values(key):
 def get_reg_value(key, subkey):
     logging.info('Reading reg key %s\\%s' % (key, subkey))
     result = winreg.QueryValueEx(key, subkey)[0]
-    logging.debug('\t %s' % result)
+    logging.debug('  %s' % result)
     return result
 
 
@@ -138,7 +141,7 @@ def exe_info(path):
         return False, reason
     else:
         info = (hash_sum, version, versions[hash_sum]['desc'] if hash_sum in versions else 'Unknown exe')
-        logging.debug('\t %s' % str(info))
+        logging.debug('  %s' % str(info))
         return info, None
 
 
@@ -216,7 +219,7 @@ def check_valid_exe(game, game_dir):
                 return exe_info(morrowind_exe)
             else:
                 reason = 'No Morrowind.exe found'
-                logging.debug('\t' + reason)
+                logging.debug('  ' + reason)
                 return False, reason
         elif game == 'Skyrim':
             exe = os.path.join(game_dir, u'TESV.exe')
@@ -224,7 +227,7 @@ def check_valid_exe(game, game_dir):
                 return exe_info(exe)
             else:
                 reason = 'Cant find TESV.exe'
-                logging.debug('\t' + reason)
+                logging.debug('  ' + reason)
                 return False, reason
         elif game == 'Oblivion':
             exe = os.path.join(game_dir, u'Oblivion.exe')
@@ -232,11 +235,11 @@ def check_valid_exe(game, game_dir):
                 return exe_info(exe)
             else:
                 reason = 'Cant find Oblivion.exe'
-                logging.debug('\t' + reason)
+                logging.debug('  ' + reason)
                 return False, reason
     else:
         reason = 'Cant find %s installation.' % game
-        logging.debug('\t' + reason)
+        logging.debug('  ' + reason)
         return False, reason
 
 

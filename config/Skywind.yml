@@ -1,12 +1,52 @@
-readme:
-    url: http://morroblivion.com/forums/skyrim/archived-topics/4195
-    xpath: '//*[@id="node-4195"]/div[2]/div[2]/div'
-    style: 'dark'
-versions:
-  "0.6.0":
-    components:
-      "test.7z":
-        type: archive
-        dest: 'Data'
-        hash: false
-        optional: true
+news: !mapping
+    whatever: !mapping
+        description: !!python/unicode 'Blah-blah'
+        title: !!python/unicode 'New release 0.6'
+        url: !!python/unicode 'http://morroblivion.com/forums/skyrim/skywind-mod-releases/3323'
+        xpath: !!python/unicode '//*[@id="node-3323"]/div[2]/div[2]/div'
+    whatever2: !mapping
+        description: !!python/unicode 'Blah-blah-bdoom'
+        title: !!python/unicode 'New update 0.6.1'
+        url: !!python/unicode 'http://morroblivion.com/forums/skyrim/skywind-mod-releases/3323'
+        xpath: !!python/unicode '//*[@id="node-3323"]/div[2]/div[2]/div'
+readme: !mapping
+    style: !!python/unicode 'dark'
+    url: !!python/unicode 'http://morroblivion.com/forums/skyrim/archived-topics/4195'
+    xpath: !!python/unicode '//*[@id="node-4195"]/div[2]/div[2]/div'
+versions: !mapping
+    0.6.0: !mapping
+        components: !mapping
+            test.7z: !mapping
+                description: !!python/unicode 'Test release file'
+                dest: !!python/unicode 'Data'
+                hash: false
+                optional: true
+                type: !!python/unicode 'archive'
+                url: !!python/unicode 'http://download.thinkbroadband.com/50MB.zip'
+    0.6.1: !mapping
+        components: !mapping
+            Skywind: !mapping
+                description: !!python/unicode 'Data files'
+                dest: !!python/unicode 'Data'
+                type: !!python/unicode 'folder'
+            Skywind.bsa: !mapping
+                description: !!python/unicode 'Main textures pack'
+                dest: !!python/unicode 'Data/Skywind.bsa'
+                type: !!python/unicode 'file'
+            Skywind.cmf: !mapping
+                description: !!python/unicode 'Master file'
+                dest: !!python/unicode 'Data/Skywind.esm'
+                hash: !!python/unicode 'fef3ea521151af9adfe5c4f777c082b8a40ea8a59465eea0442740983015194f'
+                original_hash: !!python/unicode '456a88fd382952e66f8f731a9ea8d6f40d2161adf1e2ba6947cd2b7de944234c'
+                type: !!python/unicode 'encrypted'
+            SkywindTextures.zip: !mapping
+                description: !!python/unicode 'Textures'
+                dest: !!python/unicode 'Data'
+                hash: false
+                type: !!python/unicode 'archive'
+            test.7z: !mapping
+                description: !!python/unicode 'Test file'
+                dest: !!python/unicode 'Data'
+                hash: false
+                optional: true
+                type: !!python/unicode 'archive'

@@ -15,7 +15,7 @@ import random, struct
 import zipfile
 from Crypto.Cipher import AES
 import py7zlib
-from config import Config
+from utils.config import Config
 
 __author__ = 'Alexey "Averrin" Nabrodov'
 __version__ = '0.0.3'

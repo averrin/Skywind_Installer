@@ -34,6 +34,13 @@ class ConfigManager(object):
         except Exception as e:
             logging.debug('Cant add config: %s (%s)' % (name, e))
             self.invalid.append((file_path, optional))
+            raise e
+
+    def reloadConfig(self, name):
+        self.addConfig(name, self[name].filename)
+
+    def saveConfig(self, name):
+        self[name].save(open(self[name].filename, 'w'))
 
     @property
     def critical(self):

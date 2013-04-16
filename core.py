@@ -3,21 +3,45 @@
 
 from __future__ import print_function
 import re
-
+from time import sleep
+from PyQt4.QtWebKit import QWebView
+from dm import Downloader
 
 __author__ = 'Alexey "Averrin" Nabrodov'
 __version__ = '0.0.0'
 
 from utils.esm_reader import ESMFile, CryptedESMFile
 from requests import get
-from utils.async import background_job
+from utils.async import background_job, async
 
 import logging
-from PyQt4.QtGui import QWidget, QVBoxLayout, QMainWindow, QIcon, QHBoxLayout, QStatusBar, QSizePolicy, QLabel, QApplication, QPushButton, QPixmap, QFileDialog, QMessageBox, QToolBar, QDockWidget, QStackedWidget, QAction, QToolButton, QTextBrowser
-from PyQt4.QtCore import Qt, pyqtSignal, QSize, QThread
+from PyQt4.QtGui import QWidget, QVBoxLayout, QMainWindow, QIcon, QHBoxLayout, QStatusBar, QSizePolicy, QLabel, QApplication, QPushButton, QPixmap, QFileDialog, QMessageBox, QToolBar, QDockWidget, QStackedWidget, QAction, QToolButton, QTextBrowser, QProgressBar
+from PyQt4.QtCore import Qt, pyqtSignal, QSize, QThread, QUrl
 
 from utils.checker import *
-from installer import Installer
+from installer import Installer, Component
+from ui.hub import AsyncItem, HubItem
+
+
+def showBrowserWindow(parent, url, handler=None, encoded=False):
+    win = QMainWindow()
+    browser = QWebView()
+    win.setCentralWidget(browser)
+    win.browser = browser
+    if encoded:
+        url = QUrl.fromEncoded(url)
+    else:
+        url = QUrl(url)
+
+    if handler is not None:
+        browser.titleChanged.connect(handler)
+        browser.urlChanged.connect(handler)
+
+    browser.load(url)
+    browser.show()
+    win.show()
+    parent.browser = win
+    return win
 
 
 class GameInfoPanel(QWidget):
@@ -119,20 +143,188 @@ class GameInfoPanel(QWidget):
             return '<span style="color: red"><b>%s</b></span>' % info[1], False
 
 
-class ModInfoPanel(QWidget):
-    updated = pyqtSignal()
-    get_updates = pyqtSignal(object)
+class ComponentItem(HubItem):
+    def __init__(self, component, version):
+        self.component = component
+        self.version = version
+        HubItem.__init__(self)
+        self.setLayout(QHBoxLayout())
+        self.icon = QLabel()
+        icon = QPixmap(icons_folder + 'components/%s.png' % self.component.type).scaledToWidth(48)
+        self.icon.setPixmap(icon)
+        self.layout().addWidget(self.icon)
+        self.title = QLabel('<h3>%s</h3>' % self.component.name)
+        self.desc = QLabel(self.component.description)
+        sub_panel = QWidget()
+        sub_panel.setLayout(QVBoxLayout())
+        sub_panel.layout().addWidget(self.title)
+        sub_panel.layout().addWidget(self.desc)
+        self.layout().addWidget(sub_panel)
 
-    def getRemoteConfig(self):
-        config_url = cm['config']['%s_url' % self.name.lower()]
-        if config_url.startswith('https://api.github.com/gists/'):
-            url = get(config_url).json()[u'files'][u'%s.yml' % self.name][u'raw_url']
+        self.layout().setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        sub_panel.layout().setMargin(0)
+        sub_panel.layout().setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.layout().setMargin(0)
+
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.layout().addWidget(spacer)
+
+        self.dl = QPushButton(u'Download')
+        self.dl.clicked.connect(self.beforeDownload)
+        self.install = QPushButton(u'Install')
+        self.install.clicked.connect(self.startInstall)
+
+        self.progressBar = QProgressBar()
+        self.progressBar.setMaximum(0)
+        self.layout().insertWidget(3, self.progressBar)
+        self.progressBar.hide()
+
+        fn = os.path.join(self.component.src_folder, 'status.yml')
+        if not os.path.exists(self.component.src_folder):
+            os.mkdir(self.component.src_folder)
+            with open(fn, 'w') as f:
+                f.write('installed:')
+        cm.addConfig(self.version, fn)
+
+        if not self.component.available:
+            self.layout().addWidget(self.dl)
         else:
-            url = config_url
-        cm.addRemoteConfig("%s_remote" % self.name, url)
+            if self.component.name in cm[self.version].installed and cm[self.version].installed[self.component.name]:
+                pass
+            else:
+                self.layout().addWidget(self.install)
 
-    @background_job('get_updates', error_callback=lambda x: print(x))
-    def checkUpdates(self):
+    def beforeDownload(self):
+        # print(self.component.src_folder, os.path.exists(self.component.src_folder))
+        cm[self.version]._dict['started'] = {self.component.name: True}
+
+        self.startDownload()
+
+    def startInstall(self):
+        self.install.setEnabled(False)
+        self.progressBar.setMaximum(0)
+        self.progressBar.show()
+        async(
+            lambda: self.component.install(self.game.install_path, print),
+            self.afterInstall,
+            print
+        )
+
+        self.install.hide()
+
+    def afterInstall(self):
+        cm[self.version]._dict['installed'] = {self.component.name: True}
+
+        cm[self.version].save(open(os.path.join(self.component.src_folder, 'status.yml'), 'w'))
+        cm.reloadConfig(self.version)
+        self.desc.setText(u'<span style="color: green">Successfully installed.</span>')
+        self.progressBar.hide()
+
+    def startDownload(self):
+        self.downloader = Downloader(self.component.url, os.path.join(self.component.src_folder, self.component.name))
+
+        self.downloader.progress.connect(self.progress)
+        self.downloader.error.connect(print)
+        self.downloader.flush.connect(self.flush)
+        self.downloader.finished.connect(self.finish)
+        self.dl.hide()
+        self.progressBar.show()
+        self.progressBar.setMaximum(100)
+        self.downloader.start()
+
+    def flush(self):
+        # self.toggle.setEnabled(False)
+        self.progressBar.setMaximum(0)
+        self.desc.setText('<b>Dumping to disc</b>')
+
+    def finish(self):
+        cm[self.version]._dict['started'] = {self.component.name: False}
+        cm[self.version].save(open(os.path.join(self.component.src_folder, 'status.yml'), 'w'))
+        cm.reloadConfig(self.version)
+        self.progressBar.setMaximum(100)
+        self.progressBar.setValue(100)
+        self.progressBar.hide()
+        self.desc.setText(self.component.description)
+        self.layout().addWidget(self.install)
+
+    def sizeof_fmt(self, num):
+        for x in ['bytes', 'KB', 'MB', 'GB']:
+            if 1024.0 > num > -1024.0:
+                return "%3.1f%s" % (num, x)
+            num /= 1024.0
+        return "%3.1f%s" % (num, 'TB')
+
+    def progress(self, speed, arrived, percent, total):
+        self.progressBar.setValue(percent)
+
+        self.desc.setText('<b>Done:</b> %s/%s [%s%%]. <b>Speed:</b> %s/s' % (
+            self.sizeof_fmt(arrived), self.sizeof_fmt(total), percent, self.sizeof_fmt(speed))
+        )
+
+
+class NewsItem(HubItem):
+    def __init__(self, news):
+        self.news = news
+        HubItem.__init__(self)
+        self.setLayout(QHBoxLayout())
+        self.icon = QLabel()
+        icon = QPixmap(icons_folder + 'components/news.png').scaledToWidth(48)
+        self.icon.setPixmap(icon)
+        self.layout().addWidget(self.icon)
+        self.title = QLabel('<h3>%s</h3>' % self.news.title)
+        self.desc = QLabel(self.news.description)
+        sub_panel = QWidget()
+        sub_panel.setLayout(QVBoxLayout())
+        sub_panel.layout().addWidget(self.title)
+        sub_panel.layout().addWidget(self.desc)
+        self.layout().addWidget(sub_panel)
+
+        self.layout().setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        sub_panel.layout().setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        sub_panel.layout().setMargin(0)
+        self.layout().setMargin(0)
+
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.layout().addWidget(spacer)
+
+        view = QPushButton(u'View')
+        self.layout().addWidget(view)
+        view.clicked.connect(lambda: showBrowserWindow(self, self.news.url, None))
+
+
+class UpdateItem(AsyncItem):
+    def __init__(self, game):
+        AsyncItem.__init__(self)
+        self.game = game
+        self.name = game.name
+        self.led = QLabel()
+        self.led.setPixmap(QPixmap(icons_folder + 'emblems/gray.png'))
+        self.title = QLabel('<h3>%s</h3>' % self.name)
+        self.info = QLabel('Checking updates')
+        self.setLayout(QHBoxLayout())
+        self.layout().addWidget(self.led)
+        sub_panel = QWidget()
+        sub_panel.setLayout(QVBoxLayout())
+        sub_panel.layout().addWidget(self.title)
+        sub_panel.layout().addWidget(self.info)
+        sub_panel.layout().setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.layout().addWidget(sub_panel)
+
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.layout().addWidget(spacer)
+
+        self.layout().setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        sub_panel.layout().setMargin(0)
+        self.layout().setMargin(0)
+
+        self.error.connect(print)
+
+        self.have_update = False
+
+    def job(self):
         logging.info('Checking %s updates' % self.name)
         if "%s_remote" not in cm.configs:
             self.getRemoteConfig()
@@ -141,10 +333,98 @@ class ModInfoPanel(QWidget):
 
         if local._dict != remote._dict:
             cm.configs[self.name] = cm["%s_remote" % self.name]
-            self.schema = cm[self.name]
-            return True, self
+            return True
         else:
-            return False, self
+            return False
+
+    def onReady(self, ret):
+
+        if not ret:
+
+            if self.getVersion():
+                self.led.setPixmap(QPixmap(icons_folder + 'emblems/green.png'))
+                self.info.setText('You have latest version')
+                self.dont_show = True
+            else:
+                self.led.setPixmap(QPixmap(icons_folder + 'emblems/orange.png'))
+                self.info.setText('You can install release version')
+        else:
+            self.led.setPixmap(QPixmap(icons_folder + 'emblems/orange.png'))
+            self.info.setText('Updates available')
+            self.have_update = True
+
+        self.getUpdate()
+
+        if 'news' in cm[self.name]._dict:
+            for n in cm[self.name].news.values():
+                self.hub.addItem(NewsItem(n))
+
+    def getUpdate(self):
+        cm['%s_remote' % self.name].save(open(os.path.join(config_folder, '%s.yml' % self.name), 'w'))
+        cm.addConfig(self.name, os.path.join(config_folder, '%s.yml' % self.name))
+
+        try:
+            self.showComponents()
+        except Exception as e:
+            logging.error(e)
+            self.info.setText('<span style="color: red"><b>Error:</b> %s</span>' % 'Wrong format of %s.yml' % self.name)
+
+        # self.Update()
+
+    def getVersion(self):
+        return self.game.version
+
+    def showComponents(self):
+        versions = sorted(cm[self.name].versions)
+        current_verson = self.getVersion()
+        if current_verson:
+            next_version = versions[versions.index(current_verson) + 1]
+            self.info.setText('Next version: %s' % next_version)
+        else:
+            next_version = versions[0]
+
+        _components = cm[self.name].versions[next_version].components
+        components = []
+        for c in _components:
+            components.append(
+                Component.create(
+                    c,
+                    os.path.join(data_folder, next_version),
+                    _components[c]
+                )
+            )
+        self.components = components
+        for i, component in enumerate(components):
+            item = ComponentItem(component, version=next_version)
+            item.game = self.game
+            item.pos = self.pos + i
+            self.hub.addItem(item)
+
+
+    def Update(self):
+        self.have_update = False
+        # self.led.setPixmap(QPixmap(icons_folder + 'emblems/green.png'))
+        # self.info.setText('You have latest version')
+        # self.gu.hide()
+
+    def getRemoteConfig(self):
+        config_url = cm['config']['%s_url' % self.name.lower()]
+        if config_url.startswith('https://api.github.com/gists/'):
+            url = get(config_url).json()
+            # print(url)
+            url = url[u'files'][u'%s.yml' % self.name][u'raw_url']
+        else:
+            url = config_url
+        cm.addRemoteConfig("%s_remote" % self.name, url)
+
+
+class ModInfoPanel(QWidget):
+    updated = pyqtSignal()
+    get_updates = pyqtSignal(object)
+    spawn_item = pyqtSignal(object)
+
+    def checkUpdates(self):
+        self.spawn_item.emit(UpdateItem(self))
 
     def __init__(self, name, parent_game, child_game):
         logging.info('Init %s info panel' % name)
@@ -163,9 +443,7 @@ class ModInfoPanel(QWidget):
         self.install = QPushButton(u'Install')
         self.uninstall = QPushButton(u'Uninstall')
 
-        self.schema = cm[self.name]
-
-        self.installer = Installer(self, self.schema, self.install)
+        self.installer = Installer(self, cm[self.name], self.install)
         self.uninstall.clicked.connect(self.installer.uninstall)
 
         self.installer.wizard.finished.connect(self.updateInfo)
@@ -226,7 +504,7 @@ class ModInfoPanel(QWidget):
         self.layout().setMargin(0)
 
         # if self.is_valid:
-        self.checkUpdates()
+        # self.checkUpdates()
 
     def setVersion(self):
         if self.is_valid:
@@ -234,8 +512,10 @@ class ModInfoPanel(QWidget):
             if re.match('\d\.\d\.\d', self.esm.esm_info['description']):
                 self.info_str = '<b>Installed:</b> v%s by %s' % (
                     self.esm.esm_info['description'], self.esm.esm_info['developer'])
+                self.version = self.esm.esm_info['description']
             else:
                 self.info_str = '<b>Installed:</b> Unknown version'
+                self.version = False
             if os.path.isfile(os.path.join(self.distrib_path, '%s.cmf' % self.name)):
                 from secret import key
 
@@ -250,6 +530,8 @@ class ModInfoPanel(QWidget):
                     self.info_str += '<br>It is latest version.'
 
             self.info.setText(self.info_str)
+        else:
+            self.version = False
 
     def updateInfo(self):
         self.info_str, self.is_valid = check_mod(self.name, self.parent.path)
@@ -278,4 +560,5 @@ class ModInfoPanel(QWidget):
         else:
             self.install.setEnabled(False)
 
-from TransTES import icons_folder, DEBUG, cm
+
+from TransTES import icons_folder, DEBUG, cm, config_folder, data_folder

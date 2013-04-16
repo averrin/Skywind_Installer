@@ -3,8 +3,7 @@
 
 from __future__ import print_function
 from PyQt4.QtGui import QWidget, QVBoxLayout, QApplication, QLabel, QHBoxLayout, QPixmap
-from PyQt4.QtCore import pyqtSignal
-from time import sleep
+from PyQt4.QtCore import pyqtSignal, Qt
 import sys
 from utils.async import background_job
 
@@ -14,6 +13,9 @@ __version__ = '0.0.0'
 
 
 class HubItem(QWidget):
+    pos = -1
+    dont_show = False
+
     def init(self):
         pass
 
@@ -37,7 +39,7 @@ class AsyncItem(HubItem):
     def job(self):
         return
 
-    def onReady(self):
+    def onReady(self, ret):
         pass
 
 
@@ -51,13 +53,24 @@ class Hub(QWidget):
         QWidget.__init__(self)
         self.setLayout(QVBoxLayout())
 
-        self.itemReady.connect(self.layout().addWidget)
+        self.itemReady.connect(self.addItemWidget)
         self.itemError.connect(print)
         self.itemRemoved.connect(self.layout().removeWidget)
+
+        self.layout().setAlignment(Qt.AlignTop)
+
+    def addItemWidget(self, item):
+        if not item.dont_show:
+            if item.pos == -1:
+                self.layout().addWidget(item)
+                item.pos = self.layout().count()
+            else:
+                self.layout().insertWidget(item.pos, item)
 
     @background_job('itemReady', error_callback='itemError')
     def addItem(self, item):
         self.items.append(item)
+        item.hub = self
         item.init()
         return item
 

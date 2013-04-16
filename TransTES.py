@@ -19,6 +19,7 @@ config_folder = 'config'
 icons_folder = os.path.join(config_folder, 'icons') + os.sep
 contrib_folder = os.path.join(config_folder, 'contrib') + os.sep
 temp_folder = os.path.join(config_folder, 'temp') + os.sep
+data_folder = os.path.abspath('Data Files') + os.sep
 frozen = getattr(sys, "frozen") if hasattr(sys, 'frozen') else False
 
 cm = ConfigManager(ignore_optional=True)
@@ -41,6 +42,7 @@ dm.addDeps([
     Internal(icons_folder, is_folder=True),
     Internal(contrib_folder, is_folder=True),
     Internal(temp_folder, is_folder=True),
+    Internal(data_folder, is_folder=True),
     External('unrar.exe', os.path.expandvars('%SYSTEMROOT%\\unrar.exe'), contrib_folder=contrib_folder),
     External('7z.exe', os.path.expandvars('%SYSTEMROOT%\\7z.exe'), contrib_folder=contrib_folder),
     External('7z.dll', os.path.expandvars('%SYSTEMROOT%\\7z.dll'), contrib_folder=contrib_folder),
@@ -59,10 +61,10 @@ if not dm.ok and dm.critical:
     sys.exit(0)
 
 from installer import Encrypted
-from core import GameInfoPanel, ModInfoPanel
-from ui import SideBar, Browser, SBAction
+from core import GameInfoPanel, ModInfoPanel, UpdateItem
+from ui.panels import SideBar, Browser, SBAction
+from ui.hub import Hub
 # from dm import DM
-from hub import Hub
 
 
 class UI(QMainWindow):
@@ -84,6 +86,8 @@ class UI(QMainWindow):
         is_skywind = "Skywind" in cm.configs
         is_skyblivion = "Skyblivion" in cm.configs
 
+        self.hub = Hub()
+
         self.Skyrim = GameInfoPanel('Skyrim', force_browse=True)
 
         if is_skywind:
@@ -91,12 +95,16 @@ class UI(QMainWindow):
             games_panel.layout().addWidget(self.Morrowind)
             self.Skywind = ModInfoPanel('Skywind', self.Skyrim, self.Morrowind)
             self.Skywind.get_updates.connect(self.haveUpdates)
+            self.Skywind.spawn_item.connect(self.hub.addItem)
+            self.Skywind.checkUpdates()
 
         if is_skyblivion:
             self.Oblivion = GameInfoPanel('Oblivion')
             games_panel.layout().addWidget(self.Oblivion)
             self.Skyblivion = ModInfoPanel('Skyblivion', self.Skyrim, self.Oblivion)
             self.Skyblivion.get_updates.connect(self.haveUpdates)
+            self.Skyblivion.spawn_item.connect(self.hub.addItem)
+            self.Skyblivion.checkUpdates()
 
         logging.info('Done games init')
         logging.info('Start ui building')
@@ -132,7 +140,6 @@ class UI(QMainWindow):
         # self.dm = DM(os.path.abspath(u'Data Files'))
         # self.dm.onShow = lambda: self.setMaximumWidth(games_panel.width())
 
-        self.hub = Hub()
         hub = self.createSBAction(QIcon(icons_folder + 'app.png'), 'Hub', self.hub, toolbar=True, widgetWidth=500)
 
         self.readme = Browser()
@@ -210,9 +217,48 @@ class UI(QMainWindow):
                             'Bug Report', report, toolbar=True)
 
 
-def main():
-    win = UI()
+class FirstRun(QMainWindow):
+    def __init__(self):
+        QMainWindow.__init__(self)
+        panel = QWidget()
+        self.setCentralWidget(panel)
+        panel.setLayout(QVBoxLayout())
+        panel.layout().addWidget(
+            QLabel(
+                u'''Unfortunately, while we havent own server for file hosting, we need use public API.
+And it requires authorization. Of course this actions are optional, but without it i cant guarantee updates accessibility'''
+            )
+        )
+        gh = QPushButton(u'Get GitHub key')
+        gd = QPushButton(u'Get Google Drive key')
+        ex = QPushButton(u'I dont want do it.')
+        ex.clicked.connect(self.close)
+        panel.layout().addWidget(gh)
+        panel.layout().addWidget(gd)
+        panel.layout().addWidget(ex)
+
+        self.ready = True
+        
+
+    def closeEvent(self, event):
+        if self.ready:
+            self.ui = UI()
+            self.ui.show()
+            self.hide()
+            event.ignore()
+            # cm['config'].first_run = False
+            # cm.saveConfig('config')
+        event.ignore()
+
+
+def first_main():
+    win = FirstRun()
     win.show()
+    qtapp.exec_()
+
+def main():
+    main_win = UI()
+    main_win.show()
 
     qtapp.exec_()
 
@@ -247,4 +293,8 @@ if __name__ == '__main__':
             qtapp.exec_()
 
             sys.exit(0)
-    main()
+    if cm['config'].first_run:
+        first_main()
+    else:
+        main()
+    
