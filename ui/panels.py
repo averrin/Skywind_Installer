@@ -30,14 +30,14 @@ class Browser(QWidget):
 
         logging.info('Get readme')
 
-        if os.path.isfile('config/Skywind.yml'):
+        if os.path.isfile('config/Skywind.yml') and not cm['config']['skywind_disabled']:
             self.view.setHtml(self.getReadme('Skywind'))
             button = QToolButton()
             button.setIcon(QIcon(icons_folder + 'Skywind_icon.png'))
             button.clicked.connect(lambda: self.view.setHtml(self.getReadme('Skywind')))
             self.toolbar.addWidget(button)
 
-        if os.path.isfile('config/Skyblivion.yml'):
+        if os.path.isfile('config/Skyblivion.yml') and not cm['config']['skyblivion_disabled']:
             if not self.config:
                 self.view.setHtml(self.getReadme('Skyblivion'))
             button = QToolButton()
@@ -49,31 +49,34 @@ class Browser(QWidget):
 
     def getReadme(self, game):
         self.config = cm[game]
-        page = get(self.config.readme.url)
-        if page.status_code == 200:
-            tree = etree.HTML(page.content)
-            content = tree.xpath(self.config.readme.xpath)[0]
+        try:
+            page = get(self.config.readme.url)
+            if page.status_code == 200:
+                tree = etree.HTML(page.content)
+                content = tree.xpath(self.config.readme.xpath)[0]
 
-            content = etree.tostring(content, pretty_print=True, method="html")
+                content = etree.tostring(content, pretty_print=True, method="html")
 
-            css = """
-            <head>
-                <link type="text/css" rel="stylesheet" media="all"
-                    href="http://morroblivion.com/sites/all/themes/morroblivion-%s/css/style.css?x" />
-                <style>
-                    img {
-                        margin: 0px auto;
-                        margin-bottom: 10px;
-                        display: none; /*while qt plugin missed*/
-                    }
-                    .content {width: 512px; margin: 0 auto; background-color: %s; padding: 10px}
-                </style>
-            </head>
-            """ % (self.config.readme.style, '#323232' if self.config.readme.style == 'dark' else '#eee')
+                css = """
+                <head>
+                    <link type="text/css" rel="stylesheet" media="all"
+                        href="http://morroblivion.com/sites/all/themes/morroblivion-%s/css/style.css?x" />
+                    <style>
+                        img {
+                            margin: 0px auto;
+                            margin-bottom: 10px;
+                            display: none; /*while qt plugin missed*/
+                        }
+                        .content {width: 512px; margin: 0 auto; background-color: %s; padding: 10px}
+                    </style>
+                </head>
+                """ % (self.config.readme.style, '#323232' if self.config.readme.style == 'dark' else '#eee')
 
-            content = '%s<body>%s</body>' % (css, content)
+                content = '%s<body>%s</body>' % (css, content)
 
-            return content
+                return content
+        except Exception as e:
+            logging.error(e)
         return 'Cant load page.'
 
 
@@ -129,4 +132,4 @@ class SideBar(QToolBar):
         self.dock.hide()
 
 
-from TransTES import icons_folder, cm
+from Launcher import icons_folder, cm

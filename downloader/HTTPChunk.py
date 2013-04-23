@@ -196,7 +196,7 @@ class HTTPChunk(HTTPRequest):
                    "Expect:"]
         if self.headers is not None:
             headers.extend(self.headers)
-        self.c.setopt(pycurl.HTTPHEADER, headers)
+        self.c.setopt(pycurl.HTTPHEADER, map(str, headers))
 
         self.c.setopt(pycurl.VERBOSE, 2)
         # self.c.setopt(pycurl.DEBUGFUNCTION, self.debug)

@@ -1,5 +1,8 @@
-debug: false
-first_run: true
+debug: true
+first_run: false
 installer_thread: http://morroblivion.com/forums/skyrim/skywind-development/4098
+auto_update: true
 skyblivion_url: https://api.github.com/gists/5338932
 skywind_url: https://api.github.com/gists/5338904
+skyblivion_disabled: false
+skywind_disabled: false

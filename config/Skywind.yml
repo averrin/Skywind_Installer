@@ -3,12 +3,10 @@ news: !mapping
         description: !!python/unicode 'Blah-blah'
         title: !!python/unicode 'New release 0.6'
         url: !!python/unicode 'http://morroblivion.com/forums/skyrim/skywind-mod-releases/3323'
-        xpath: !!python/unicode '//*[@id="node-3323"]/div[2]/div[2]/div'
     whatever2: !mapping
         description: !!python/unicode 'Blah-blah-bdoom'
         title: !!python/unicode 'New update 0.6.1'
         url: !!python/unicode 'http://morroblivion.com/forums/skyrim/skywind-mod-releases/3323'
-        xpath: !!python/unicode '//*[@id="node-3323"]/div[2]/div[2]/div'
 readme: !mapping
     style: !!python/unicode 'dark'
     url: !!python/unicode 'http://morroblivion.com/forums/skyrim/archived-topics/4195'
@@ -16,13 +14,13 @@ readme: !mapping
 versions: !mapping
     0.6.0: !mapping
         components: !mapping
-            test.7z: !mapping
-                description: !!python/unicode 'Test release file'
+            Skywind_0.6.rar: !mapping
+                description: !!python/unicode 'Full release file'
                 dest: !!python/unicode 'Data'
                 hash: false
                 optional: true
                 type: !!python/unicode 'archive'
-                url: !!python/unicode 'http://download.thinkbroadband.com/50MB.zip'
+                url: !!python/unicode 'https://docs.google.com/file/d/0B8F9egY3lyGdUUhtZnVydmJIVjQ/edit'
     0.6.1: !mapping
         components: !mapping
             Skywind: !mapping
@@ -50,3 +48,4 @@ versions: !mapping
                 hash: false
                 optional: true
                 type: !!python/unicode 'archive'
+                url: !!python/unicode 'https://docs.google.com/file/d/0B8F9egY3lyGdUUhtZnVydmJIVjQ/edit'

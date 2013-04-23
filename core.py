@@ -5,13 +5,11 @@ from __future__ import print_function
 import re
 from time import sleep
 from PyQt4.QtWebKit import QWebView
-from dm import Downloader
 
 __author__ = 'Alexey "Averrin" Nabrodov'
 __version__ = '0.0.0'
 
 from utils.esm_reader import ESMFile, CryptedESMFile
-from requests import get
 from utils.async import background_job, async
 
 import logging
@@ -320,7 +318,7 @@ class UpdateItem(AsyncItem):
         sub_panel.layout().setMargin(0)
         self.layout().setMargin(0)
 
-        self.error.connect(print)
+        self.error.connect(self.onError)
 
         self.have_update = False
 
@@ -336,6 +334,9 @@ class UpdateItem(AsyncItem):
             return True
         else:
             return False
+
+    def onError(self, e):
+        self.info.setText('<span style="color: red"><b>Error:</b> %s</span>' % e)
 
     def onReady(self, ret):
 
@@ -410,9 +411,9 @@ class UpdateItem(AsyncItem):
     def getRemoteConfig(self):
         config_url = cm['config']['%s_url' % self.name.lower()]
         if config_url.startswith('https://api.github.com/gists/'):
-            url = get(config_url).json()
-            # print(url)
-            url = url[u'files'][u'%s.yml' % self.name][u'raw_url']
+            id = config_url.split('/')[-1]
+            Gists.fetchGistInfo(id)
+            url = Gists.getDirectLink(id, '%s.yml' % self.name)
         else:
             url = config_url
         cm.addRemoteConfig("%s_remote" % self.name, url)
@@ -561,4 +562,6 @@ class ModInfoPanel(QWidget):
             self.install.setEnabled(False)
 
 
-from TransTES import icons_folder, DEBUG, cm, config_folder, data_folder
+from Launcher import icons_folder, DEBUG, cm, config_folder, data_folder, Gists
+from utils.oauth import LimitExceeded
+from dm import Downloader

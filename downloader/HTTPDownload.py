@@ -52,7 +52,7 @@ class HTTPDownload():
 
     def __init__(self, url, filename, get={}, post={}, referer=None, cj=None, bucket=None,
                  options={}, disposition=False, callback=None, bf_callback=None, abort_callback=None, suspended=False,
-                 headers=None, gd=0):
+                 headers=None, gd=0, init_size=0):
         self.url = url
         self.filename = filename  #complete file destination, not only name
         self.get = get
@@ -68,6 +68,8 @@ class HTTPDownload():
         self.suspended = suspended
 
         self.gd = gd
+        self.init_size = init_size
+        print(gd)
         # all arguments
 
         self.abort = False
@@ -183,8 +185,8 @@ class HTTPDownload():
 
         print(self.gd)
         if self.gd:
-            resume = True
-            self.info.addChunk("%s.chunk0" % self.filename, (0, 0))
+            # resume = True
+            self.info.addChunk("%s.chunk0" % self.filename, (self.init_size, self.gd))
             self.size = self.gd
             self.info.size = self.gd
             self.info.createChunks(self.info.getCount())
@@ -193,7 +195,7 @@ class HTTPDownload():
         self.chunks = []
 
         self.options = {"interface": None, 'proxies': None, 'ipv6': False}
-        init = HTTPChunk(0, self, None, resume, self.headers) #initial chunk that will load complete file (if needed)
+        init = HTTPChunk(0, self, (self.init_size, self.gd), resume, self.headers) #initial chunk that will load complete file (if needed)
 
         self.chunks.append(init)
         self.m.add_handle(init.getHandle())
@@ -289,14 +291,14 @@ class HTTPDownload():
                     # check if init is not finished so we reset download connections
                     # note that other chunks are closed and everything downloaded with initial connection
                     if failed and init not in failed and init.c not in chunksDone:
-                        self.log.error(_("Download chunks failed, fallback to single connection | %s" % (str(ex))))
+                        self.log.error("Download chunks failed, fallback to single connection | %s" % (str(ex)))
 
                         #list of chunks to clean and remove
                         to_clean = filter(lambda x: x is not init, self.chunks)
                         for chunk in to_clean:
                             self.closeChunk(chunk)
                             self.chunks.remove(chunk)
-                            remove(fs_encode(chunk_folder + self.info.getChunkName(chunk.id)))
+                            remove(fs_encode(chunk_folder + os.path.split(self.info.getChunkName(chunk.id))[-1]))
 
                         #let first chunk load the rest and update the info file
                         init.resetRange()

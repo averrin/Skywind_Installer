@@ -23,6 +23,7 @@ from utils.async import background_job
 from downloader.HTTPDownload import HTTPDownload, Abort
 
 import os
+from utils.oauth import GDFile
 
 temp_folder = 'config/temp/'
 if not os.path.isdir(temp_folder):
@@ -47,122 +48,6 @@ GD_API_CALLBACK = 'urn:ietf:wg:oauth:2.0:oob'
 # GD_API_CALLBACK = 'http://localhost:8000'
 
 
-class GDPlugin(Plugin):
-    def processURL(self, url, dest):
-        size = None
-
-        self.url = url
-        self.dest = dest
-        self.code = False
-
-        if url.startswith('https://docs.google'):
-
-            if not storage.get():
-                flow = OAuth2WebServerFlow(GD_API_ID, GD_API_SECRET, GD_SCOPE, redirect_uri=GD_API_CALLBACK)
-                authorize_url = flow.step1_get_authorize_url()
-                win = QtWebKit.QWebView()
-                win.titleChanged.connect(self.getKey)
-                win.show()
-                win.load(QtCore.QUrl.fromEncoded(authorize_url))
-
-                while not self.code:
-                    sleep(0.5)
-
-                creds = flow.step2_exchange(self.code)
-            else:
-                creds = storage.get()
-
-            http = httplib2.Http()
-            http = creds.authorize(http)
-
-        return url, dest, None, 0
-
-    def _process(self, url, destination):
-        headers = None
-        size = 0
-        with open('config/temp/key', 'r') as f:
-            token = f.read().split('#')[1]
-
-            parsed = urlparse(url)
-            try:
-                file_id = parse_qs(parsed.query)['id'][0]
-            except KeyError:
-                file_id = url.split('/')[-1]
-                if file_id == 'edit':
-                    file_id = url.split('/')[-2]
-
-            api_url = 'https://www.googleapis.com/drive/v2/files/%s?access_token=%s' % (file_id, token)
-            r = requests.get(api_url)
-            r = r.json()
-
-            try:
-                url = r['downloadUrl'] + '&access_token=' + token
-                destination = os.path.join('.', r['originalFilename'])
-                size = int(r['fileSize'])
-            except KeyError:
-                print(r)
-                self.renewToken()
-                return self._process(url, destination)
-
-            fn = os.path.basename(destination)
-            if os.path.isfile(temp_folder + fn + '.chunk0'):
-                arrived = os.path.getsize(temp_folder + fn + '.chunk0')
-                headers = ['Range: bytes=%s-%s' % (arrived, size)]
-
-        return url, destination, headers, size
-
-    def renewToken(self):
-        with open('config/temp/key', 'r') as f:
-            auth = f.read().split('#')
-            refresh_token = auth[2]
-            refresh_url = 'https://accounts.google.com/o/oauth2/token'
-            r = requests.post(refresh_url, data={
-                'refresh_token': refresh_token,
-                'client_id': GD_API_ID,
-                'client_secret': GD_API_SECRET,
-                'grant_type': 'refresh_token'})
-
-            print(r.json())
-            token = r.json()['access_token']
-
-            auth[1] = token
-
-        with open('config/temp/key', 'w') as f:
-            f.write('#'.join(auth))
-
-    def showAuthDialog(self):
-        win = QtWebKit.QWebView()
-        win.titleChanged.connect(self.getKey)
-        win.show()
-        win.load(QtCore.QUrl(self.auth_url))
-
-    def getKey(self, title):
-        title = str(title.toUtf8())
-        print(title)
-        if title.startswith('Success code='):
-            code = title[len('Success code='):]
-            print(code)
-
-            token_url = "https://accounts.google.com/o/oauth2/token"
-            r = requests.post(token_url, data={
-                'code': code,
-                'client_id': GD_API_ID,
-                'client_secret': GD_API_SECRET,
-                'redirect_uri': GD_API_CALLBACK,
-                'grant_type': 'authorization_code'})
-            auth = r.json()
-
-            try:
-                token = auth['access_token']
-                refresh_token = auth['refresh_token']
-
-                with open('config/temp/key', 'w') as f:
-                    f.write(code + '#' + token + '#' + refresh_token)
-                self._process(self.url, self.dest)
-            except KeyError:
-                print(auth)
-
-
 class Downloader(QtCore.QThread):
     started = QtCore.pyqtSignal()
     stopped = QtCore.pyqtSignal()
@@ -180,9 +65,26 @@ class Downloader(QtCore.QThread):
 
         # try:
 
-        self.gd = GDPlugin()
+        # self.gd = GDPlugin()
+        # 
+        # self.real_src, self.destination, headers, size = self.gd.processURL(self.src, self.destination)
+        size = None
+        headers = None
+        arrived = 0
 
-        self.real_src, self.destination, headers, size = self.gd.processURL(self.src, self.destination)
+        if src.startswith('https://docs.google.com'):
+            self.file = GDFile(src)
+            self.real_src = self.file.getDirectLink()
+            print(self.real_src)
+            if os.path.isdir(self.destination):
+                self.destination = os.path.join(self.destination, self.file.getFileName())
+            size = self.file.getFileSize()
+            arrived = 0
+            if os.path.isfile(temp_folder + self.file.getFileName() + '.chunk0'):
+                arrived = os.path.getsize(temp_folder + self.file.getFileName() + '.chunk0')
+            headers = self.file.getHeaders(arrived)
+        else:
+            self.real_src = src
 
         self.downloader = HTTPDownload(
             self.real_src, self.destination,
@@ -191,7 +93,8 @@ class Downloader(QtCore.QThread):
             abort_callback=self.stopped.emit,
             suspended=self.suspended,
             headers=headers,
-            gd=size
+            gd=size,
+            init_size=arrived
         )
 
         # except Exception, e:
@@ -386,14 +289,14 @@ class PathPanel(QtGui.QWidget):
 
 class DM(QtGui.QWidget):
     added = QtCore.pyqtSignal(object)
-    
-    
+
+
     def showWeb(self, url, handler):
         win = QtWebKit.QWebView()
         win.titleChanged.connect(handler)
         win.show()
         win.load(QtCore.QUrl.fromEncoded(url))
-    
+
     def __init__(self, src=''):
         logging.info('DM init')
         QtGui.QWidget.__init__(self)
@@ -440,7 +343,7 @@ class DM(QtGui.QWidget):
         self.urls = {}
 
         logging.info('Start suspended downloads')
-        
+
         self.added.connect(self.addItem)
 
         with open(temp_folder + 'suspended.list') as f:
@@ -463,7 +366,7 @@ class DM(QtGui.QWidget):
             for p in self.urls.values():
                 _urls += '%s %s\n' % p
             f.write(_urls)
-            
+
     def addItem(self, item):
         self.layout().addWidget(item)
 
@@ -512,3 +415,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# from utils.oauth import GDFile

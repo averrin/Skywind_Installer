@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+import logging
 import functools
 import hashlib
 import sys
-import logging
-from PyQt4.QtGui import QWidget, QVBoxLayout, QMainWindow, QIcon, QHBoxLayout, QStatusBar, QSizePolicy, QLabel, QApplication, QPushButton, QPixmap, QFileDialog, QMessageBox, QToolBar, QDockWidget, QStackedWidget, QAction, QToolButton, QTextBrowser
+from PyQt4.QtGui import QWidget, QVBoxLayout, QMainWindow, QIcon, QHBoxLayout, QStatusBar, QSizePolicy, QLabel, QApplication, QPushButton, QPixmap, QFileDialog, QMessageBox, QToolBar, QDockWidget, QStackedWidget, QAction, QToolButton, QTextBrowser, QSplashScreen
 from PyQt4.QtCore import Qt, pyqtSignal, QSize, QThread
 import os
 from managers import DebugManager, ConfigManager, DepManager, Internal, External
@@ -15,7 +15,7 @@ from managers import DebugManager, ConfigManager, DepManager, Internal, External
 __author__ = 'Alexey "Averrin" Nabrodov'
 __version__ = '0.1.0'
 
-config_folder = 'config'
+config_folder = os.path.abspath('config') + os.sep
 icons_folder = os.path.join(config_folder, 'icons') + os.sep
 contrib_folder = os.path.join(config_folder, 'contrib') + os.sep
 temp_folder = os.path.join(config_folder, 'temp') + os.sep
@@ -24,8 +24,15 @@ frozen = getattr(sys, "frozen") if hasattr(sys, 'frozen') else False
 
 cm = ConfigManager(ignore_optional=True)
 cm.addConfig("config", os.path.join(config_folder, 'config.yml'))
-cm.addConfig("Skywind", os.path.join(config_folder, 'Skywind.yml'), optional=True)
-cm.addConfig("Skyblivion", os.path.join(config_folder, 'Skyblivion.yml'), optional=True)
+
+if not cm['config']['skywind_disabled']:
+    with open(config_folder + 'Skywind.yml', 'w') as f:
+        f.write('empty:')
+    cm.addConfig("Skywind", os.path.join(config_folder, 'Skywind.yml'), optional=True)
+if not cm['config']['skyblivion_disabled']:
+    with open(config_folder + 'Skyblivion.yml', 'w') as f:
+        f.write('empty:')
+    cm.addConfig("Skyblivion", os.path.join(config_folder, 'Skyblivion.yml'), optional=True)
 
 try:
     DEBUG = '-debug' in sys.argv or cm['config'].debug
@@ -33,7 +40,11 @@ except Exception as e:
     logging.error(e)
     DEBUG = True
 if DEBUG:
-    debug = DebugManager('TransTES', __version__)
+    debug = DebugManager('TESLauncher', __version__)
+
+# logging.debug(sys._MEIPASS)
+# logging.debug(config_folder)
+# logging.debug(icons_folder)
 
 dm = DepManager()
 
@@ -51,12 +62,17 @@ dm.addDeps([
 
 if not dm.ok and dm.critical:
     qtapp = QApplication(sys.argv)
+    
+    icon = QPixmap(os.path.join(icons_folder, 'app.png'))
+    label = QLabel()
+    label.setPixmap(icon)
 
     dm_info = QTextBrowser()
     dm_info.append(u'<h3>Installer seems corrupted:</h3>')
     for d in dm.critical:
         dm_info.append(d.info)
-    dm_info.show()
+    # dm_info.show()
+    label.show()
     qtapp.exec_()
     sys.exit(0)
 
@@ -64,14 +80,16 @@ from installer import Encrypted
 from core import GameInfoPanel, ModInfoPanel, UpdateItem
 from ui.panels import SideBar, Browser, SBAction
 from ui.hub import Hub
-# from dm import DM
+from utils.oauth import GistClient, GDClient, GDFile
 
+Gists = GistClient()
+Drive = GDClient()
 
 class UI(QMainWindow):
     def __init__(self):
         logging.info('Start main UI init')
         QMainWindow.__init__(self)
-        self.setWindowTitle(u"TransTES Hub" if not DEBUG else 'TransTES [DEBUG]')
+        self.setWindowTitle(u"The Elder Scrolls: Legacies" if not DEBUG else 'The Elder Scrolls: Legacies [DEBUG]')
         self.setWindowIcon(QIcon('icons/app.png'))
 
         panel = QWidget()
@@ -226,12 +244,16 @@ class FirstRun(QMainWindow):
         panel.layout().addWidget(
             QLabel(
                 u'''Unfortunately, while we havent own server for file hosting, we need use public API.
-And it requires authorization. Of course this actions are optional, but without it i cant guarantee updates accessibility'''
+And it requires authorization. Of course this actions are optional, but without it i cant guarantee updates accessibility.'''
             )
         )
         gh = QPushButton(u'Get GitHub key')
+        gh.clicked.connect(lambda: Gists.auth())
+        Gists.creds_read.connect(lambda: gh.setText(u'Github oauth: Done'))
         gd = QPushButton(u'Get Google Drive key')
-        ex = QPushButton(u'I dont want do it.')
+        gd.clicked.connect(lambda: Drive.auth())
+        Drive.creds_read.connect(lambda: gd.setText(u'Google Drive oauth: Done'))
+        ex = QPushButton(u'Close this window.')
         ex.clicked.connect(self.close)
         panel.layout().addWidget(gh)
         panel.layout().addWidget(gd)
@@ -246,8 +268,8 @@ And it requires authorization. Of course this actions are optional, but without 
             self.ui.show()
             self.hide()
             event.ignore()
-            # cm['config'].first_run = False
-            # cm.saveConfig('config')
+            cm['config'].first_run = False
+            cm.saveConfig('config')
         event.ignore()
 
 
@@ -257,13 +279,21 @@ def first_main():
     qtapp.exec_()
 
 def main():
+    logging.debug('before splash')
+    splash = QSplashScreen(QPixmap(os.path.join(icons_folder, "Skywind_icon.png")))
+    splash.show()
+    qtapp.processEvents()
+    logging.debug('before ui init')
     main_win = UI()
     main_win.show()
+    splash.finish(main_win)
+    logging.debug('show ui')
 
     qtapp.exec_()
 
 
 if __name__ == '__main__':
+    logging.debug('before qtapp')
     qtapp = QApplication(sys.argv)
     if len(sys.argv) > 1:
         if sys.argv[1] == '--hash' and len(sys.argv) > 2:
