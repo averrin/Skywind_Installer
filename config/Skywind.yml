@@ -42,6 +42,7 @@ versions: !mapping
                 dest: !!python/unicode 'Data'
                 hash: false
                 type: !!python/unicode 'archive'
+                url: !!python/unicode 'http://download.thinkbroadband.com/200MB.zip'
             test.7z: !mapping
                 description: !!python/unicode 'Test file'
                 dest: !!python/unicode 'Data'

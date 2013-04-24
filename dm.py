@@ -63,11 +63,6 @@ class Downloader(QtCore.QThread):
         self.suspended = False
         QtCore.QThread.__init__(self)
 
-        # try:
-
-        # self.gd = GDPlugin()
-        # 
-        # self.real_src, self.destination, headers, size = self.gd.processURL(self.src, self.destination)
         size = None
         headers = None
         arrived = 0

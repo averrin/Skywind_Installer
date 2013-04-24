@@ -13,10 +13,13 @@ class Mapping(OrderedDict):
 
     def __getattribute__(self, key):
         try:
-            attr = super(OrderedDict, self).__getitem__(key)
+            attr = OrderedDict.__getitem__(self, key)
         except KeyError:
-            attr = super(OrderedDict, self).__getattribute__(key)
+            attr = OrderedDict.__getattribute__(self, key)
         return attr
+
+    def __setitem__(self, key, value, *args, **kwargs):
+        OrderedDict.__setitem__(self, key, value, *args, **kwargs)
 
     #
     #    def __getitem__(self, key):
@@ -29,12 +32,15 @@ class Mapping(OrderedDict):
     #    def __setattr__(self, key, value):
     #        super(OrderedDict, self).__setitem__(key, value)
 
+    def __contains__(self, item):
+        return item in self.keys()
+
     @classmethod
     def _convert(cls, attr):
         tf = {'TRUE': True, 'FALSE': False}
         if isinstance(attr, str) and attr.upper() in tf:
             return tf[str(attr).upper()]
-        elif isinstance(attr, dict):
+        elif type(attr) is dict:
             m = Mapping()
             m.update(attr)
             m._total_convert()
@@ -90,12 +96,16 @@ class Config(object):
         else:
             object.__setattr__(self, key, value)
 
+    def __setitem__(self, key, value):
+        # print(key, value)
+        self._dict[key] = value
+
     def __getattr__(self, key):
         try:
             return self._dict.__getattribute__(key)
         except AttributeError:
             attr = self._dict[key]
-            if isinstance(attr, dict):
+            if type(attr) is dict:
                 m = Mapping()
                 m.update(attr)
                 m._total_convert()
@@ -105,17 +115,18 @@ class Config(object):
 
     def __getitem__(self, key):
         attr = self._dict[key]
-        if isinstance(attr, dict):
+        if type(attr) is dict:
             m = Mapping()
             m.update(attr)
             m._total_convert()
             attr = m
+        # print(key, attr)
         return attr
 
     def save(self, cfg_file):
         for attr in self._dict:
             r = self._dict[attr]
-            if isinstance(r, dict):
+            if type(r) is dict:
                 m = Mapping()
                 m.update(r)
                 r = m
@@ -130,12 +141,13 @@ def main():
     # cfg = Config(open('../Apps/Orlangur/config/main.cfg'))
     #    print(cfg.options)
     # cfg.save(open('../Apps/Orlangur/config/main.cfg', 'w'))
-    cfg = Config(open('../config/config.yml'))
-    print(cfg.first_run)
-    cfg.first_run = False
-    cfg.save(open('../config/config.yml', 'w'))
-    cfg = Config(open('../config/config.yml'))
-    print(cfg.first_run)
+    cfg = Config(open('C:\\Dropbox\\bin\\Skywind\\Data Files\\0.6.1\\status.yml'))
+    print(cfg['started'])
+    cfg['started']['test'] = True
+    print(cfg['started'])
+    cfg.save(open('C:\\Dropbox\\bin\\Skywind\\Data Files\\0.6.1\\status.yml', 'w'))
+    cfg = Config(open('C:\\Dropbox\\bin\\Skywind\\Data Files\\0.6.1\\status.yml'))
+    print(cfg['started'])
 
 
 if __name__ == '__main__':

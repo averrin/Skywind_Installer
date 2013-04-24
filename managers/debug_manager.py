@@ -16,7 +16,12 @@ class DebugManager(object):
         self.max_logsize = max_logsize
 
         if os.path.exists(self.log_filename) and os.path.getsize(self.log_filename) > self.max_logsize:
-            os.unlink(self.log_filename)
+            try:
+                os.unlink(self.log_filename)
+            except Exception as e:
+                logging.error(e)
+                pass
+
         logging.basicConfig(format='[%(asctime)s] %(levelname)s:\t\t%(message)s', filename=self.log_filename,
                             level=logging.DEBUG,
                             datefmt='%d.%m %H:%M:%S')

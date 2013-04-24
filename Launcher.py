@@ -78,7 +78,7 @@ if not dm.ok and dm.critical:
 
 from installer import Encrypted
 from core import GameInfoPanel, ModInfoPanel, UpdateItem
-from ui.panels import SideBar, Browser, SBAction
+from ui.panels import SideBar, Browser, SBAction, ToolPanel
 from ui.hub import Hub
 from utils.oauth import GistClient, GDClient, GDFile
 
@@ -164,6 +164,8 @@ class UI(QMainWindow):
         # self.readme.onShow = lambda: self.setMaximumWidth(games_panel.width())
         self.createSBAction(QIcon(icons_folder + 'readme.png'), 'Readme', self.readme, toolbar=True,
                                      widgetWidth=700, titleWidget=self.readme.toolbar)
+        self.createSBAction(QIcon(icons_folder + 'tools.png'), 'Tools', ToolPanel(Gists, Drive), toolbar=True,
+                            widgetWidth=300)
         # self.createSBAction(QIcon(icons_folder + 'dm.png'),
         #                     'Downloads', self.dm, toolbar=True,
         #                     titleWidget=self.dm.toolbar)

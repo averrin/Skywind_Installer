@@ -142,6 +142,9 @@ class GameInfoPanel(QWidget):
 
 
 class ComponentItem(HubItem):
+    error = pyqtSignal(Exception)
+    message = pyqtSignal(str)
+
     def __init__(self, component, version):
         self.component = component
         self.version = version
@@ -178,11 +181,14 @@ class ComponentItem(HubItem):
         self.layout().insertWidget(3, self.progressBar)
         self.progressBar.hide()
 
+        self.error.connect(self.onError)
+        self.error.connect(print)
+
         fn = os.path.join(self.component.src_folder, 'status.yml')
         if not os.path.exists(self.component.src_folder):
             os.mkdir(self.component.src_folder)
             with open(fn, 'w') as f:
-                f.write('installed:')
+                f.write('installed: {}\nstarted: {}')
         cm.addConfig(self.version, fn)
 
         if not self.component.available:
@@ -193,9 +199,24 @@ class ComponentItem(HubItem):
             else:
                 self.layout().addWidget(self.install)
 
+        if self.component.name in cm[self.version]['started'] and cm[self.version]['started'][self.component.name]:
+            self.dl.setText('Resume')
+
+        # if self.component.name in cm[self.version]['installed'] and cm[self.version]['installed'][self.component.name]:
+        #     self.install.setText('Installed')
+        #     self.install.setEnabled(False)
+
+    def onError(self, e):
+        print(e)
+        self.desc.setText('<span style="color: red"><b>Error:</b> %s</span>' % e)
+
     def beforeDownload(self):
         # print(self.component.src_folder, os.path.exists(self.component.src_folder))
-        cm[self.version]._dict['started'] = {self.component.name: True}
+        print(cm[self.version]['started'])
+        cm[self.version]['started'][self.component.name] = True
+        cm[self.version].save(open(os.path.join(self.component.src_folder, 'status.yml'), 'w'))
+        cm.reloadConfig(self.version)
+        print(cm[self.version]['started'])
 
         self.startDownload()
 
@@ -204,15 +225,15 @@ class ComponentItem(HubItem):
         self.progressBar.setMaximum(0)
         self.progressBar.show()
         async(
-            lambda: self.component.install(self.game.install_path, print),
+            lambda: self.component.install(self.game.install_path, lambda x: self.message.emit(x)),
             self.afterInstall,
-            print
+            lambda x: self.error.emit(x)
         )
 
         self.install.hide()
 
     def afterInstall(self):
-        cm[self.version]._dict['installed'] = {self.component.name: True}
+        cm[self.version]['installed'][self.component.name] = True
 
         cm[self.version].save(open(os.path.join(self.component.src_folder, 'status.yml'), 'w'))
         cm.reloadConfig(self.version)
@@ -220,7 +241,12 @@ class ComponentItem(HubItem):
         self.progressBar.hide()
 
     def startDownload(self):
-        self.downloader = Downloader(self.component.url, os.path.join(self.component.src_folder, self.component.name))
+        try:
+            self.downloader = Downloader(self.component.url,
+                                         os.path.join(self.component.src_folder, self.component.name))
+        except LimitExceeded as e:
+            self.desc.setText(u'<span style="color: red">%s</span>' % e)
+            return
 
         self.downloader.progress.connect(self.progress)
         self.downloader.error.connect(print)
@@ -237,7 +263,7 @@ class ComponentItem(HubItem):
         self.desc.setText('<b>Dumping to disc</b>')
 
     def finish(self):
-        cm[self.version]._dict['started'] = {self.component.name: False}
+        cm[self.version]._dict['started'][self.component.name] = False
         cm[self.version].save(open(os.path.join(self.component.src_folder, 'status.yml'), 'w'))
         cm.reloadConfig(self.version)
         self.progressBar.setMaximum(100)
@@ -300,7 +326,7 @@ class UpdateItem(AsyncItem):
         self.led = QLabel()
         self.led.setPixmap(QPixmap(icons_folder + 'emblems/gray.png'))
         self.title = QLabel('<h3>%s</h3>' % self.name)
-        self.info = QLabel('Checking updates')
+        self.info = QLabel('')
         self.setLayout(QHBoxLayout())
         self.layout().addWidget(self.led)
         sub_panel = QWidget()
@@ -314,6 +340,11 @@ class UpdateItem(AsyncItem):
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.layout().addWidget(spacer)
 
+        self.chb = QPushButton('Check updates')
+        self.chb.clicked.connect(self._job)
+        self.layout().addWidget(self.chb)
+        self.chb.hide()
+
         self.layout().setAlignment(Qt.AlignTop | Qt.AlignLeft)
         sub_panel.layout().setMargin(0)
         self.layout().setMargin(0)
@@ -322,7 +353,16 @@ class UpdateItem(AsyncItem):
 
         self.have_update = False
 
+    def init(self):
+        self.ready.connect(self.onReady)
+        if cm['config'].auto_update:
+            self._job()
+        else:
+            self.info.setText('')
+            self.chb.show()
+
     def job(self):
+        self.info.setText('Checking updates...')
         logging.info('Checking %s updates' % self.name)
         if "%s_remote" not in cm.configs:
             self.getRemoteConfig()
@@ -336,6 +376,7 @@ class UpdateItem(AsyncItem):
             return False
 
     def onError(self, e):
+        self.led.setPixmap(QPixmap(icons_folder + 'emblems/red.png'))
         self.info.setText('<span style="color: red"><b>Error:</b> %s</span>' % e)
 
     def onReady(self, ret):
@@ -370,13 +411,14 @@ class UpdateItem(AsyncItem):
             logging.error(e)
             self.info.setText('<span style="color: red"><b>Error:</b> %s</span>' % 'Wrong format of %s.yml' % self.name)
 
-        # self.Update()
+            # self.Update()
 
     def getVersion(self):
         return self.game.version
 
     def showComponents(self):
         versions = sorted(cm[self.name].versions)
+        # print(versions)
         current_verson = self.getVersion()
         if current_verson:
             next_version = versions[versions.index(current_verson) + 1]
@@ -384,6 +426,7 @@ class UpdateItem(AsyncItem):
         else:
             next_version = versions[0]
 
+        # print(cm[self.name])
         _components = cm[self.name].versions[next_version].components
         components = []
         for c in _components:
@@ -400,7 +443,6 @@ class UpdateItem(AsyncItem):
             item.game = self.game
             item.pos = self.pos + i
             self.hub.addItem(item)
-
 
     def Update(self):
         self.have_update = False

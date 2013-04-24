@@ -2,13 +2,14 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
-from PyQt4.QtGui import QAction, QWidget, QVBoxLayout, QToolBar, QToolButton, QIcon, QDockWidget, QStackedWidget
+from PyQt4.QtGui import QAction, QWidget, QVBoxLayout, QToolBar, QToolButton, QIcon, QDockWidget, QStackedWidget, QPushButton, QLabel
 from PyQt4.QtWebKit import QWebView
 import logging
 from PyQt4.QtCore import QSize, Qt
 from lxml import etree
 import os
 from requests import get
+from utils.oauth import GistClient, GDClient
 
 
 __author__ = 'Alexey "Averrin" Nabrodov'
@@ -130,6 +131,33 @@ class SideBar(QToolBar):
         self.parent.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
 
         self.dock.hide()
+
+
+class ToolPanel(QWidget):
+    def __init__(self, Gists, Drive):
+        QWidget.__init__(self)
+
+        self.setLayout(QVBoxLayout())
+
+        gh = QPushButton(u'Get GitHub key')
+        gh.clicked.connect(lambda: Gists.auth())
+        Gists.creds_read.connect(lambda: gh.setText(u'Github oauth: Done'))
+        gd = QPushButton(u'Get Google Drive key')
+        gd.clicked.connect(lambda: Drive.auth())
+        Drive.creds_read.connect(lambda: gd.setText(u'Google Drive oauth: Done'))
+        # ex = QPushButton(u'Close this window.')
+        # ex.clicked.connect(self.close)
+        self.layout().addWidget(gh)
+        self.layout().addWidget(gd)
+        # self.layout().addWidget(ex)
+
+        self.layout().addWidget(QLabel('<hr>'))
+        
+        uninstaller = QPushButton(u'Uninstall components')
+        self.layout().addWidget(uninstaller)
+
+        # self.layout().setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.layout().setAlignment(Qt.AlignTop)
 
 
 from Launcher import icons_folder, cm

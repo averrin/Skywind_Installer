@@ -44,6 +44,10 @@ class BaseClient(QObject):
             logging.info(u'Found oauth creds')
             self.creds = self.storage.get()
             self._http = self.creds.authorize(httplib2.Http(disable_ssl_certificate_validation=True))
+            try:
+                self.creds.refresh(self.http)
+            except Exception as e:
+                logging.error('Refreshing error in %s: %s' % (container, e))
         else:
             logging.info(u'OAuth creds not found. Auth or all requests will be unauthorized.')
             self.creds = False
@@ -153,15 +157,13 @@ class GDClient(BaseClient):
 
     def getHeaders(self, id, arrived=0):
         size = self.getFileSize(id)
-        self.creds.refresh(self.http)
         headers = ['Range: bytes=%s-%s' % (arrived, size), 'Authorization: Bearer %s' % self.creds.access_token]
         return headers
 
 
 class GDFile(object):
-    client = GDClient()
-
     def __init__(self, url):
+        self.client = GDClient()
         self.url = url
         parsed = urlparse(url)
         try:

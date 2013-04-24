@@ -33,7 +33,7 @@ class AsyncItem(HubItem):
         self._job()
 
     @background_job('ready', error_callback='error')
-    def _job(self):
+    def _job(self, *args):
         return self.job()
 
     def job(self):
