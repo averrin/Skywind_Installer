@@ -186,16 +186,16 @@ class HTTPDownload():
         print(self.gd)
         if self.gd:
             # resume = True
-            self.info.addChunk("%s.chunk0" % self.filename, (self.init_size, self.gd))
+            # self.info.addChunk("%s.chunk0" % self.filename, (self.init_size, self.gd))
             self.size = self.gd
             self.info.size = self.gd
-            self.info.createChunks(self.info.getCount())
+            # self.info.createChunks(self.info.getCount())
             self.info.save()
 
         self.chunks = []
 
         self.options = {"interface": None, 'proxies': None, 'ipv6': False}
-        init = HTTPChunk(0, self, (self.init_size, self.gd), resume, self.headers) #initial chunk that will load complete file (if needed)
+        init = HTTPChunk(0, self, None, resume, self.headers) #initial chunk that will load complete file (if needed)
 
         self.chunks.append(init)
         self.m.add_handle(init.getHandle())
@@ -207,6 +207,9 @@ class HTTPDownload():
         done = False
         if self.info.getCount() > 1: # This is a resume, if we were chunked originally assume still can
             self.chunkSupport = True
+            
+        if self.gd:
+            self.chunkSupport = False
 
         while 1:
             #need to create chunks
@@ -223,7 +226,7 @@ class HTTPDownload():
                 init.setRange(self.info.getChunkRange(0))
 
                 for i in range(1, chunks):
-                    c = HTTPChunk(i, self, self.info.getChunkRange(i), resume)
+                    c = HTTPChunk(i, self, self.info.getChunkRange(i), resume, self.headers)
 
                     handle = c.getHandle()
                     if handle:

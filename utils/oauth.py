@@ -153,6 +153,7 @@ class GDClient(BaseClient):
 
     def getHeaders(self, id, arrived=0):
         size = self.getFileSize(id)
+        self.creds.refresh(self.http)
         headers = ['Range: bytes=%s-%s' % (arrived, size), 'Authorization: Bearer %s' % self.creds.access_token]
         return headers
 

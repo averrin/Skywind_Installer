@@ -47,5 +47,6 @@ versions: !mapping
                 dest: !!python/unicode 'Data'
                 hash: false
                 optional: true
+                tt_url: !!python/unicode 'https://docs.google.com/file/d/0B8F9egY3lyGdUUhtZnVydmJIVjQ/edit'
                 type: !!python/unicode 'archive'
-                url: !!python/unicode 'https://docs.google.com/file/d/0B8F9egY3lyGdUUhtZnVydmJIVjQ/edit'
+                url: !!python/unicode 'https://docs.google.com/file/d/0B-Xn0rLoTvRlNHBodFh4ZFJ2Ync'

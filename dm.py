@@ -80,8 +80,10 @@ class Downloader(QtCore.QThread):
                 self.destination = os.path.join(self.destination, self.file.getFileName())
             size = self.file.getFileSize()
             arrived = 0
-            if os.path.isfile(temp_folder + self.file.getFileName() + '.chunk0'):
-                arrived = os.path.getsize(temp_folder + self.file.getFileName() + '.chunk0')
+            zch = temp_folder + os.path.split(self.destination)[-1] + '.chunk0'
+            print(zch)
+            if os.path.isfile(zch):
+                arrived = os.path.getsize(zch)
             headers = self.file.getHeaders(arrived)
         else:
             self.real_src = src
